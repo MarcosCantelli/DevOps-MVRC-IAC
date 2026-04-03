@@ -6,7 +6,7 @@ datastore      = "VS2_HD1_1TB"
 network        = "VM Network"
 
 # Template e VM
-template_name  = "Ubuntu-Terraform"
+template_name  = "Ubuntu-App-Template"
 vm_name        = "JavaAppTerraform"
 num_cpus       = 2
 memory_mb      = 4096
