@@ -14,7 +14,6 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo "Repositorio clonado: ${env.GIT_URL}"
                 echo "Branch: ${env.GIT_BRANCH}"
                 echo "Commit: ${env.GIT_COMMIT}"
             }
@@ -44,14 +43,25 @@ pipeline {
             }
         }
 
+        stage('Validar VM') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform output'
+                }
+            }
+        }
+
     }
 
     post {
         success {
-            echo "Pipeline finalizado. VM provisionada com sucesso."
+            echo "VM provisionada com sucesso."
         }
         failure {
-            echo "Pipeline falhou. Verifique os logs acima."
+            echo "Pipeline falhou. A VM pode precisar ser removida manualmente no vCenter."
+            dir('terraform') {
+                sh 'terraform destroy -auto-approve || true'
+            }
         }
     }
 }

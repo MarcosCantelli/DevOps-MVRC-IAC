@@ -62,16 +62,5 @@ resource "vsphere_virtual_machine" "vm" {
     # Clone the VM from the specified template
     clone {
         template_uuid = data.vsphere_virtual_machine.template.id # Template UUID fetched from the template data source
-
-        customize {
-            linux_options {
-                host_name = var.vm_name             # Hostname for the VM
-                domain    = "local"                 # Domain for the VM
-            }
-        network_interface {
-                    ipv4_address = ""                 # Static IP address for the VM (leave empty for DHCP)
-                    ipv4_netmask = 24                 # Subnet mask for the VM
-            }
-        }
     }
 }
