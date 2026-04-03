@@ -1,0 +1,49 @@
+---
+- name: Criar usuário dedicado para a aplicação
+  user:
+    name: "{{ app_user }}"
+    shell: /bin/bash
+    system: yes
+    create_home: yes
+    state: present
+
+- name: Adicionar appuser ao grupo www-data
+  user:
+    name: "{{ app_user }}"
+    groups: www-data
+    append: yes
+
+- name: Criar diretório da aplicação
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+
+- name: Desmontar TrueNAS após instalação
+  mount:
+    path: "{{ smb_mount_point }}"
+    state: unmounted
+
+- name: Verificar Java instalado
+  command: /usr/local/bin/java -version
+  register: java_result
+  changed_when: false
+
+- name: Verificar Node.js instalado
+  command: /usr/local/bin/node --version
+  register: node_result
+  changed_when: false
+
+- name: Verificar Nginx instalado
+  command: nginx -v
+  register: nginx_result
+  changed_when: false
+
+- name: Exibir resumo do ambiente instalado
+  debug:
+    msg:
+      - "Java:    {{ java_result.stderr }}"
+      - "Node.js: {{ node_result.stdout }}"
+      - "Nginx:   {{ nginx_result.stderr }}"

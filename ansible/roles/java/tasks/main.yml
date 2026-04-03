@@ -1,0 +1,48 @@
+---
+- name: Verificar se Java já está instalado
+  command: java -version
+  register: java_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Criar diretório para o Java
+  file:
+    path: /opt/java/jdk-17
+    state: directory
+    mode: '0755'
+  when: java_check.rc != 0
+
+- name: Copiar binário do Java 17 do TrueNAS
+  copy:
+    src: "{{ smb_mount_point }}/Marcos/Linux/java/jdk-17.0.14_linux-x64_bin.tar.gz"
+    dest: /tmp/jdk-17.0.14.tar.gz
+    remote_src: yes
+  when: java_check.rc != 0
+
+- name: Extrair Java 17
+  unarchive:
+    src: /tmp/jdk-17.0.14.tar.gz
+    dest: /opt/java/jdk-17
+    remote_src: yes
+    extra_opts: ['--strip-components=1']
+  when: java_check.rc != 0
+
+- name: Configurar JAVA_HOME no ambiente global
+  copy:
+    dest: /etc/profile.d/java.sh
+    content: |
+      export JAVA_HOME=/opt/java/jdk-17
+      export PATH=$JAVA_HOME/bin:$PATH
+    mode: '0644'
+
+- name: Criar link simbólico do Java
+  file:
+    src: /opt/java/jdk-17/bin/java
+    dest: /usr/local/bin/java
+    state: link
+    force: yes
+
+- name: Limpar arquivo temporário
+  file:
+    path: /tmp/jdk-17.0.14.tar.gz
+    state: absent

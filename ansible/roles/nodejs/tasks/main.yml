@@ -1,0 +1,52 @@
+---
+- name: Verificar se Node.js já está instalado
+  command: node --version
+  register: node_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Criar diretório para o Node.js
+  file:
+    path: /opt/nodejs
+    state: directory
+    mode: '0755'
+  when: node_check.rc != 0
+
+- name: Copiar binário do Node.js 20 do TrueNAS
+  copy:
+    src: "{{ smb_mount_point }}/Marcos/Linux/node/node-v20.19.5-linux-x64.tar.xz"
+    dest: /tmp/node-v20.19.5.tar.xz
+    remote_src: yes
+  when: node_check.rc != 0
+
+- name: Extrair Node.js 20
+  unarchive:
+    src: /tmp/node-v20.19.5.tar.xz
+    dest: /opt/nodejs
+    remote_src: yes
+    extra_opts: ['--strip-components=1']
+  when: node_check.rc != 0
+
+- name: Configurar Node.js no PATH global
+  copy:
+    dest: /etc/profile.d/nodejs.sh
+    content: |
+      export NODE_HOME=/opt/nodejs
+      export PATH=$NODE_HOME/bin:$PATH
+    mode: '0644'
+
+- name: Criar links simbólicos do Node.js
+  file:
+    src: "/opt/nodejs/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - node
+    - npm
+    - npx
+
+- name: Limpar arquivo temporário
+  file:
+    path: /tmp/node-v20.19.5.tar.xz
+    state: absent
