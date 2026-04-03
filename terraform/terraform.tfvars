@@ -2,7 +2,7 @@
 vsphere_server = "192.168.31.13"       # IP ou hostname do seu vCenter
 datacenter     = "MVRC-DC"
 cluster        = "Xeon"
-datastore      = "VS1_HD500GB"
+datastore      = "VS2_HD2_1TB"
 network        = "VM Network"
 
 # Template e VM
