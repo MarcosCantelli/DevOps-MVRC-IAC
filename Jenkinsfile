@@ -63,21 +63,29 @@ pipeline {
 
         stage('Ansible - Configurar VM') {
             steps {
-                sh """
-                    echo "[app_servers]" > ansible/inventory/hosts.ini
-                    echo "${env.VM_IP} ansible_user=mvrc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
-                """
+                withCredentials([
+                    string(credentialsId: 'truenas-server',   variable: 'TNAS_SERVER'),
+                    string(credentialsId: 'truenas-share',    variable: 'TNAS_SHARE'),
+                    string(credentialsId: 'truenas-smb-user', variable: 'TNAS_USER'),
+                    string(credentialsId: 'truenas-smb-pass', variable: 'TNAS_PASS')
+                ]) {
+                    sh '''
+                        echo "[app_servers]" > ansible/inventory/hosts.ini
+                        echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
+                    '''
 
-                sh """
-                    ansible-playbook \
-                      -i ansible/inventory/hosts.ini \
-                      ansible/playbooks/configure-vm.yml \
-                      --extra-vars "truenas_server=${TRUENAS_SERVER} truenas_share=${TRUENAS_SHARE} truenas_user=${TRUENAS_USER} truenas_pass=${TRUENAS_PASS}"
-                """
+                    sh '''
+                        cd ansible
+                        ansible-playbook \
+                          -i inventory/hosts.ini \
+                          playbooks/configure-vm.yml \
+                          --extra-vars "truenas_server=$TNAS_SERVER truenas_share=$TNAS_SHARE truenas_user=$TNAS_USER truenas_pass=$TNAS_PASS"
+                    '''
+                }
             }
         }
-
     }
+
 
     post {
         success {
