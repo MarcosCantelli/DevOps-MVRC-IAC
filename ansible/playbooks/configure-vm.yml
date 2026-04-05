@@ -3,11 +3,8 @@
   hosts: app_servers
   become: true
   vars:
-    java_version: "17"
-    node_version: "20"
     app_user: "mvrc"
     app_dir: "/opt/app"
-    smb_mount_point: "/mnt/truenas"
 
   pre_tasks:
     - name: Aguardar SSH ficar disponível
