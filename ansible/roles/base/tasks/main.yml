@@ -22,7 +22,7 @@
     path: "{{ smb_mount_point }}"
     src: "//{{ truenas_server }}/{{ truenas_share }}"
     fstype: cifs
-    opts: "username={{ truenas_user }},password={{ truenas_pass }},uid=root,gid=root,file_mode=0755,dir_mode=0755,vers=3.0"
+    opts: "username={{ truenas_user }},password={{ truenas_pass }},uid=root,gid=root,file_mode=0755,dir_mode=0755"
     state: mounted
 
 - name: Confirmar que os arquivos estão acessíveis
