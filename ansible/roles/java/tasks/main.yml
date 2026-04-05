@@ -1,6 +1,6 @@
 ---
 - name: Verificar se Java já está instalado
-  command: java -version
+  command: /usr/local/bin/java -version
   register: java_check
   ignore_errors: true
   changed_when: false
@@ -12,14 +12,14 @@
     mode: '0755'
   when: java_check.rc != 0
 
-- name: Copiar binário do Java 17 do TrueNAS
-  copy:
-    src: "{{ smb_mount_point }}/Marcos/Linux/java/jdk-17.0.14_linux-x64_bin.tar.gz"
+- name: Baixar JDK 17.0.14 do Adoptium
+  get_url:
+    url: "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.14%2B7/OpenJDK17U-jdk_x64_linux_hotspot_17.0.14_7.tar.gz"
     dest: /tmp/jdk-17.0.14.tar.gz
-    remote_src: yes
+    mode: '0644'
   when: java_check.rc != 0
 
-- name: Extrair Java 17
+- name: Extrair JDK 17
   unarchive:
     src: /tmp/jdk-17.0.14.tar.gz
     dest: /opt/java/jdk-17

@@ -3,11 +3,10 @@
   user:
     name: "{{ app_user }}"
     shell: /bin/bash
-    system: yes
     create_home: yes
     state: present
 
-- name: Adicionar appuser ao grupo www-data
+- name: Adicionar mvrc ao grupo www-data
   user:
     name: "{{ app_user }}"
     groups: www-data
@@ -20,11 +19,6 @@
     owner: "{{ app_user }}"
     group: "{{ app_user }}"
     mode: '0755'
-
-- name: Desmontar TrueNAS após instalação
-  mount:
-    path: "{{ smb_mount_point }}"
-    state: unmounted
 
 - name: Verificar Java instalado
   command: /usr/local/bin/java -version

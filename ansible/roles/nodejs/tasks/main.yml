@@ -1,6 +1,6 @@
 ---
 - name: Verificar se Node.js já está instalado
-  command: node --version
+  command: /usr/local/bin/node --version
   register: node_check
   ignore_errors: true
   changed_when: false
@@ -12,11 +12,11 @@
     mode: '0755'
   when: node_check.rc != 0
 
-- name: Copiar binário do Node.js 20 do TrueNAS
-  copy:
-    src: "{{ smb_mount_point }}/Marcos/Linux/node/node-v20.19.5-linux-x64.tar.xz"
+- name: Baixar Node.js 20.19.5
+  get_url:
+    url: "https://nodejs.org/dist/v20.19.5/node-v20.19.5-linux-x64.tar.xz"
     dest: /tmp/node-v20.19.5.tar.xz
-    remote_src: yes
+    mode: '0644'
   when: node_check.rc != 0
 
 - name: Extrair Node.js 20
