@@ -8,10 +8,6 @@ pipeline {
     environment {
         TF_VAR_vsphere_user     = credentials('vsphere-user')
         TF_VAR_vsphere_password = credentials('vsphere-password')
-        TRUENAS_SERVER          = credentials('truenas-server')
-        TRUENAS_SHARE           = credentials('truenas-share')
-        TRUENAS_USER            = credentials('truenas-smb-user')
-        TRUENAS_PASS            = credentials('truenas-smb-pass')
     }
 
     stages {
@@ -20,6 +16,14 @@ pipeline {
             steps {
                 echo "Branch: ${env.GIT_BRANCH}"
                 echo "Commit: ${env.GIT_COMMIT}"
+            }
+        }
+
+        stage('Limpar state anterior') {
+            steps {
+                dir('terraform') {
+                    sh 'rm -f terraform.tfstate terraform.tfstate.backup tfplan'
+                }
             }
         }
 
@@ -61,6 +65,26 @@ pipeline {
             }
         }
 
+        stage('Aguardar VM inicializar') {
+            steps {
+                script {
+                    echo "Aguardando SSH ficar disponível em ${env.VM_IP}..."
+                    sh """
+                        for i in \$(seq 1 30); do
+                            if nc -zw5 ${env.VM_IP} 22 2>/dev/null; then
+                                echo "SSH disponível após \$((i*10)) segundos"
+                                exit 0
+                            fi
+                            echo "Tentativa \$i/30 — aguardando 10s..."
+                            sleep 10
+                        done
+                        echo "Timeout: SSH não disponível após 300 segundos"
+                        exit 1
+                    """
+                }
+            }
+        }
+
         stage('Ansible - Configurar VM') {
             steps {
                 withCredentials([
@@ -84,16 +108,16 @@ pipeline {
                 }
             }
         }
-    }
 
+    }
 
     post {
         success {
-            echo "VM provisionada e configurada com sucesso."
-            echo "IP: ${env.VM_IP}"
+            echo "Pipeline finalizado com sucesso."
+            echo "VM configurada no IP: ${env.VM_IP}"
         }
         failure {
-            echo "Pipeline falhou. Iniciando destruição da VM."
+            echo "Pipeline falhou. Destruindo VM se existir."
             dir('terraform') {
                 sh 'terraform destroy -auto-approve || true'
             }

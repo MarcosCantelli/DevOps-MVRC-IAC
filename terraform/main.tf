@@ -37,30 +37,29 @@ data "vsphere_network" "network" {
 
 # Define the virtual machine resource
 resource "vsphere_virtual_machine" "vm" {
-    name             = var.vm_name             # Name of the virtual machine to create
-    resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id # Resource pool ID fetched from the cluster data source
-    datastore_id     = data.vsphere_datastore.datastore.id # Datastore ID fetched from the datastore data source
+  name             = var.vm_name
+  resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
+  datastore_id     = data.vsphere_datastore.datastore.id
 
-    num_cpus = var.num_cpus                    # Number of CPUs for the VM
-    memory   = var.memory_mb                   # Memory (in MB) for the VM
-    guest_id = data.vsphere_virtual_machine.template.guest_id # Guest OS ID fetched from the template
+  num_cpus                   = var.num_cpus
+  memory                     = var.memory_mb
+  guest_id                   = data.vsphere_virtual_machine.template.guest_id
+  wait_for_guest_net_timeout = 60
+  wait_for_guest_ip_timeout  = 60
 
-    # Configure the disk for the VM
-    disk {
-        label            = "disk0"             # Label for the disk
-        size             = data.vsphere_virtual_machine.template.disks.0.size # Disk size fetched from the template
-        eagerly_scrub    = data.vsphere_virtual_machine.template.disks.0.eagerly_scrub # Eager scrub setting from the template
-        thin_provisioned = data.vsphere_virtual_machine.template.disks.0.thin_provisioned # Thin provisioning setting from the template
-    }
+  network_interface {
+    network_id   = data.vsphere_network.network.id
+    adapter_type = data.vsphere_virtual_machine.template.network_interface_types[0]
+  }
 
-    # Configure the network interface for the VM
-    network_interface {
-        network_id   = data.vsphere_network.network.id # Network ID fetched from the network data source
-        adapter_type = data.vsphere_virtual_machine.template.network_interface_types[0] # Adapter type fetched from the template
-    }
+  disk {
+    label            = "disk0"
+    size             = data.vsphere_virtual_machine.template.disks.0.size
+    eagerly_scrub    = data.vsphere_virtual_machine.template.disks.0.eagerly_scrub
+    thin_provisioned = data.vsphere_virtual_machine.template.disks.0.thin_provisioned
+  }
 
-    # Clone the VM from the specified template
-    clone {
-        template_uuid = data.vsphere_virtual_machine.template.id # Template UUID fetched from the template data source
-    }
+  clone {
+    template_uuid = data.vsphere_virtual_machine.template.id
+  }
 }
