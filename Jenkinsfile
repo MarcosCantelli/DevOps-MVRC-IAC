@@ -8,6 +8,7 @@ pipeline {
     environment {
         TF_VAR_vsphere_user     = credentials('vsphere-user')
         TF_VAR_vsphere_password = credentials('vsphere-password')
+        STATIC_VM_IP            = '192.168.31.50'
     }
 
     stages {
@@ -51,7 +52,7 @@ pipeline {
             }
         }
 
-        stage('Capturar IP da VM') {
+        stage('Capturar IP DHCP da VM') {
             steps {
                 dir('terraform') {
                     script {
@@ -59,7 +60,7 @@ pipeline {
                             script: 'terraform output -raw vm_ip_address',
                             returnStdout: true
                         ).trim()
-                        echo "IP da VM provisionada: ${env.VM_IP}"
+                        echo "IP DHCP da VM: ${env.VM_IP}"
                     }
                 }
             }
@@ -68,7 +69,7 @@ pipeline {
         stage('Aguardar VM inicializar') {
             steps {
                 script {
-                    echo "Aguardando SSH ficar disponível em ${env.VM_IP}..."
+                    echo "Aguardando SSH em ${env.VM_IP}..."
                     sh """
                         for i in \$(seq 1 30); do
                             if nc -zw5 ${env.VM_IP} 22 2>/dev/null; then
@@ -78,7 +79,7 @@ pipeline {
                             echo "Tentativa \$i/30 — aguardando 10s..."
                             sleep 10
                         done
-                        echo "Timeout: SSH não disponível após 300 segundos"
+                        echo "Timeout: SSH não disponível"
                         exit 1
                     """
                 }
@@ -101,12 +102,33 @@ pipeline {
             }
         }
 
+        stage('Verificar IP estático') {
+            steps {
+                script {
+                    echo "Verificando se a VM está acessível no IP fixo ${STATIC_VM_IP}..."
+                    sh """
+                        for i in \$(seq 1 18); do
+                            if ping -c 1 -W 3 ${STATIC_VM_IP} 2>/dev/null; then
+                                echo "VM respondendo no IP fixo ${STATIC_VM_IP}"
+                                exit 0
+                            fi
+                            echo "Tentativa \$i/18 — aguardando 10s..."
+                            sleep 10
+                        done
+                        echo "Timeout: VM não responde no IP ${STATIC_VM_IP}"
+                        exit 1
+                    """
+                    sh "nc -zw5 ${STATIC_VM_IP} 22 && echo 'SSH disponível no IP fixo'"
+                }
+            }
+        }
+
     }
 
     post {
         success {
             echo "Pipeline finalizado com sucesso."
-            echo "VM configurada no IP: ${env.VM_IP}"
+            echo "VM disponível no IP fixo: ${STATIC_VM_IP}"
         }
         failure {
             echo "Pipeline falhou. Destruindo VM se existir."

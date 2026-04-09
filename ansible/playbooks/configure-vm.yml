@@ -5,6 +5,10 @@
   vars:
     app_user: "mvrc"
     app_dir: "/opt/app"
+    static_ip: "192.168.31.50"
+    gateway: "192.168.31.1"
+    dns_primary: "192.168.31.1"
+    dns_secondary: "8.8.8.8"
 
   pre_tasks:
     - name: Aguardar SSH ficar disponível
@@ -18,6 +22,7 @@
         cache_valid_time: 3600
 
   roles:
+    - network
     - base
     - java
     - nodejs
