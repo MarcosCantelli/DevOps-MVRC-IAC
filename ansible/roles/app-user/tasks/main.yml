@@ -21,7 +21,7 @@
     mode: '0755'
 
 - name: Verificar Java instalado
-  command: /usr/local/bin/java -version
+  command: java -version
   register: java_result
   changed_when: false
 
@@ -38,6 +38,6 @@
 - name: Exibir resumo do ambiente instalado
   debug:
     msg:
-      - "Java:    {{ java_result.stderr }}"
+      - "Java (JRE):  {{ java_result.stderr }}"
       - "Node.js: {{ node_result.stdout }}"
       - "Nginx:   {{ nginx_result.stderr }}"
