@@ -1,48 +1,22 @@
 ---
-- name: Verificar se Java já está instalado
-  command: /usr/local/bin/java -version
+- name: Verificar se Java Runtime já está instalado
+  command: java -version
   register: java_check
   ignore_errors: true
   changed_when: false
 
-- name: Criar diretório para o Java
-  file:
-    path: /opt/java/jdk-17
-    state: directory
-    mode: '0755'
+- name: Instalar OpenJDK 17 JRE
+  apt:
+    name: openjdk-17-jre-headless
+    state: present
+    update_cache: yes
   when: java_check.rc != 0
 
-- name: Baixar JDK 17.0.14 do Adoptium
-  get_url:
-    url: "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.14%2B7/OpenJDK17U-jdk_x64_linux_hotspot_17.0.14_7.tar.gz"
-    dest: /tmp/jdk-17.0.14.tar.gz
-    mode: '0644'
-  when: java_check.rc != 0
+- name: Confirmar versão instalada
+  command: java -version
+  register: java_version
+  changed_when: false
 
-- name: Extrair JDK 17
-  unarchive:
-    src: /tmp/jdk-17.0.14.tar.gz
-    dest: /opt/java/jdk-17
-    remote_src: yes
-    extra_opts: ['--strip-components=1']
-  when: java_check.rc != 0
-
-- name: Configurar JAVA_HOME no ambiente global
-  copy:
-    dest: /etc/profile.d/java.sh
-    content: |
-      export JAVA_HOME=/opt/java/jdk-17
-      export PATH=$JAVA_HOME/bin:$PATH
-    mode: '0644'
-
-- name: Criar link simbólico do Java
-  file:
-    src: /opt/java/jdk-17/bin/java
-    dest: /usr/local/bin/java
-    state: link
-    force: yes
-
-- name: Limpar arquivo temporário
-  file:
-    path: /tmp/jdk-17.0.14.tar.gz
-    state: absent
+- name: Exibir versão do Java
+  debug:
+    msg: "{{ java_version.stderr }}"

@@ -1,0 +1,33 @@
+---
+- name: Instalar pacotes de rede
+  apt:
+    name:
+      - netplan.io
+    state: present
+
+- name: Desabilitar cloud-init gerenciamento de rede
+  copy:
+    dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    content: |
+      network: {config: disabled}
+    mode: '0644'
+
+- name: Aplicar configuração de IP estático via Netplan
+  template:
+    src: netplan.yaml.j2
+    dest: /etc/netplan/00-installer-config.yaml
+    mode: '0600'
+
+- name: Aplicar configuração Netplan
+  command: netplan apply
+  async: 10
+  poll: 0
+  ignore_errors: true
+
+- name: Aguardar VM reiniciar com novo IP
+  wait_for:
+    host: "{{ static_ip }}"
+    port: 22
+    delay: 15
+    timeout: 120
+  delegate_to: localhost
