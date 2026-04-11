@@ -28,3 +28,4 @@
     - nodejs
     - nginx
     - app-user
+    - docker

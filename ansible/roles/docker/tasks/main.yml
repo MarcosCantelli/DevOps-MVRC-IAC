@@ -1,0 +1,65 @@
+---
+- name: Instalar dependências para o Docker
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Criar diretório para chave GPG do Docker
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Adicionar chave GPG oficial do Docker
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: Adicionar repositório oficial do Docker
+  shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: Atualizar cache após adicionar repositório Docker
+  apt:
+    update_cache: yes
+
+- name: Instalar Docker Engine
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Habilitar e iniciar o serviço Docker
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Adicionar usuário mvrc ao grupo docker
+  user:
+    name: mvrc
+    groups: docker
+    append: yes
+
+- name: Verificar instalação do Docker
+  command: docker --version
+  register: docker_version
+  changed_when: false
+
+- name: Exibir versão do Docker instalado
+  debug:
+    msg: "{{ docker_version.stdout }}"
