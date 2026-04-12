@@ -1,41 +1,41 @@
 ---
-- name: Instalar Nginx
-  apt:
-    name: nginx
-    state: present
-    update_cache: yes
-
-- name: Remover configuração padrão do Nginx
-  file:
-    path: /etc/nginx/sites-enabled/default
-    state: absent
-
-- name: Criar diretório para os arquivos do frontend
-  file:
-    path: /var/www/app
-    state: directory
-    owner: "{{ app_user }}"
-    group: www-data
-    mode: '0755'
-
-- name: Copiar configuração do virtual host
-  template:
-    src: app.conf.j2
-    dest: /etc/nginx/sites-available/app.conf
-    mode: '0644'
-
-- name: Ativar virtual host
-  file:
-    src: /etc/nginx/sites-available/app.conf
-    dest: /etc/nginx/sites-enabled/app.conf
-    state: link
-
-- name: Testar configuração do Nginx
-  command: nginx -t
-  changed_when: false
-
-- name: Iniciar e habilitar Nginx
-  systemd:
-    name: nginx
-    state: started
-    enabled: yes
+#- name: Instalar Nginx
+#  apt:
+#    name: nginx
+#    state: present
+#    update_cache: yes
+#
+#- name: Remover configuração padrão do Nginx
+#  file:
+#    path: /etc/nginx/sites-enabled/default
+#    state: absent
+#
+#- name: Criar diretório para os arquivos do frontend
+#  file:
+#    path: /var/www/app
+#    state: directory
+#    owner: "{{ app_user }}"
+#    group: www-data
+#    mode: '0755'
+#
+#- name: Copiar configuração do virtual host
+#  template:
+#    src: app.conf.j2
+#    dest: /etc/nginx/sites-available/app.conf
+#    mode: '0644'
+#
+#- name: Ativar virtual host
+#  file:
+#    src: /etc/nginx/sites-available/app.conf
+#    dest: /etc/nginx/sites-enabled/app.conf
+#    state: link
+#
+#- name: Testar configuração do Nginx
+#  command: nginx -t
+#  changed_when: false
+#
+#- name: Iniciar e habilitar Nginx
+#  systemd:
+#    name: nginx
+#    state: started
+#    enabled: yes

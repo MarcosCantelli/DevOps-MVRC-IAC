@@ -30,14 +30,14 @@
   register: node_result
   changed_when: false
 
-- name: Verificar Nginx instalado
-  command: nginx -v
-  register: nginx_result
-  changed_when: false
+#- name: Verificar Nginx instalado
+#  command: nginx -v
+#  register: nginx_result
+#  changed_when: false
 
 - name: Exibir resumo do ambiente instalado
   debug:
     msg:
       - "Java (JRE):  {{ java_result.stderr }}"
       - "Node.js: {{ node_result.stdout }}"
-      - "Nginx:   {{ nginx_result.stderr }}"
+#      - "Nginx:   {{ nginx_result.stderr }}"
