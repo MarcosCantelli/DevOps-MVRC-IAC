@@ -5,9 +5,9 @@
   ignore_errors: true
   changed_when: false
 
-- name: Instalar OpenJDK 17 JRE
+- name: Instalar OpenJDK 21 JRE
   apt:
-    name: openjdk-17-jre-headless
+    name: openjdk-21-jre-headless
     state: present
     update_cache: yes
   when: java_check.rc != 0

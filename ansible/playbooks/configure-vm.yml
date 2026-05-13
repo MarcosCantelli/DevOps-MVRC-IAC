@@ -26,6 +26,8 @@
     - base
     - java
     - nodejs
-#    - nginx
+    
+    
+    - nginx
     - app-user
     - docker
