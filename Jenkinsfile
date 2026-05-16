@@ -8,7 +8,7 @@ pipeline {
     environment {
         TF_VAR_vsphere_user     = credentials('vsphere-user')
         TF_VAR_vsphere_password = credentials('vsphere-password')
-        STATIC_VM_IP            = '192.168.31.50'
+        STATIC_VM_IP            = '192.168.31.49'
     }
 
     stages {
