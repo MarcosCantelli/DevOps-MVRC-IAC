@@ -7,6 +7,6 @@ network        = "VM Network"
 
 # Template e VM
 template_name  = "Ubuntu-Terraform"
-vm_name        = "App-Server-HO"
+vm_name        = "App-Server-DEV"
 num_cpus       = 2
 memory_mb      = 4096
