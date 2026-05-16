@@ -2,106 +2,43 @@ server {
     listen 80;
     server_name _;
 
-    # =========================================================
-    # SEGURANÇA
+    # ==========================================
     # BLOQUEIA ACESSO DIRETO AO IP
-    # Ex.: http://192.168.31.50
-    # =========================================================
+    # ==========================================
     location = / {
         return 404;
     }
 
-    # =========================================================
+    # ==========================================
     # WR13 - NEXT.JS
-    # Container: wr13
-    # Porta interna: 3000
-    # URL: /wr13
-    # =========================================================
+    # ==========================================
     location /wr13/ {
 
         proxy_pass http://localhost:3000/wr13/;
 
         proxy_http_version 1.1;
 
-        # WebSocket / Hot Reload / Next.js
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        # Headers padrão
         proxy_set_header Host $host;
         proxy_cache_bypass $http_upgrade;
 
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
 
-    # =========================================================
-    # WR13 - ARQUIVOS ESTÁTICOS NEXT
-    # =========================================================
-    location /wr13/_next/ {
-
-        proxy_pass http://localhost:3000/wr13/_next/;
-
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+    # ==========================================
+    # NEXT STATIC FILES
+    # ==========================================
+    location /_next/static/ {
+        proxy_pass http://localhost:3000/_next/static/;
     }
 
-    # =========================================================
-    # TEMPLATE GENÉRICO - NOVAS APLICAÇÕES NEXT.JS
-    # COPIAR E ALTERAR:
-    #
-    # URL:
-    # /meuapp/
-    #
-    # PORTA:
-    # localhost:3001
-    #
-    # next.config.ts:
-    # basePath: '/meuapp'
-    # =========================================================
-
-    # location /meuapp/ {
-    #
-    #     proxy_pass http://localhost:3001/meuapp/;
-    #
-    #     proxy_http_version 1.1;
-    #
-    #     proxy_set_header Upgrade $http_upgrade;
-    #     proxy_set_header Connection "upgrade";
-    #
-    #     proxy_set_header Host $host;
-    #     proxy_cache_bypass $http_upgrade;
-    #
-    #     proxy_set_header X-Real-IP $remote_addr;
-    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    #     proxy_set_header X-Forwarded-Proto $scheme;
-    #
-    #     proxy_connect_timeout 60s;
-    #     proxy_send_timeout 60s;
-    #     proxy_read_timeout 60s;
-    # }
-    #
-    # location /meuapp/_next/ {
-    #
-    #     proxy_pass http://localhost:3001/meuapp/_next/;
-    #
-    #     proxy_http_version 1.1;
-    #
-    #     proxy_set_header Host $host;
-    #     proxy_cache_bypass $http_upgrade;
-    # }
-
-    # =========================================================
+    # ==========================================
     # API JAVA
-    # =========================================================
+    # ==========================================
     location /api/ {
 
         proxy_pass http://localhost:8080/;
@@ -109,27 +46,17 @@ server {
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
-
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
         proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
 
-    # =========================================================
-    # HEALTHCHECK DO NGINX
-    # =========================================================
-    location /health {
-        access_log off;
-        return 200 "healthy\n";
-    }
-
-    # =========================================================
+    # ==========================================
     # LOGS
-    # =========================================================
+    # ==========================================
     access_log /var/log/nginx/app_access.log;
     error_log  /var/log/nginx/app_error.log;
 }
