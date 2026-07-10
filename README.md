@@ -8,7 +8,7 @@
 
 This project implements a complete DevOps pipeline for a private on-premise infrastructure. Every step — from virtual machine creation to application environment setup — is fully automated and triggered by a GitHub pull request merge into the `main` branch.
 
-The pipeline provisions a virtual machine on VMware vSphere using Terraform, then hands it off to Ansible, which installs and configures all dependencies required to run a Java backend + Angular frontend web application served through Nginx.
+The pipeline provisions a virtual machine on VMware vSphere using Terraform, then hands it off to Ansible, which installs and configures all dependencies required to run Java/Node applications, plus a Traefik reverse proxy that lets multiple applications share the same VM, each reachable by its own URL path (e.g. `/crochejuka`, `/wr13`) instead of a dedicated port.
 
 ---
 
@@ -25,7 +25,7 @@ GitHub (PR merged to main)
         │
         ├── Stage 1 → Terraform   →  Provisions VM on vSphere/vCenter
         │
-        ├── Stage 2 → Ansible     →  Configures VM (Java 17, Node.js 20, Nginx)
+        ├── Stage 2 → Ansible     →  Configures VM (Java 17, Node.js 20, Docker, Traefik)
         │
         └── Post Actions          →  Reports success or destroys VM on failure
 ```
@@ -42,8 +42,8 @@ GitHub (PR merged to main)
 | IaC           | Terraform with vSphere provider v2.x         |
 | Configuration | Ansible                                      |
 | OS Template   | Ubuntu 24.04 LTS                             |
-| Web Server    | Nginx (reverse proxy + static file serving)  |
-| Runtime       | Java 17 (Temurin) + Node.js 20               |
+| Reverse Proxy | Traefik (Docker-native, routes by URL path)  |
+| Runtime       | Java 17 (Temurin) + Node.js 20 + Docker      |
 
 ---
 
@@ -70,11 +70,13 @@ DEVOPS-MVRC-IAC/
     ├── playbooks/
     │   └── configure-vm.yml           # Main playbook
     └── roles/
+        ├── network/                   # Static IP (netplan)
         ├── base/                      # Essential packages
         ├── java/                      # JDK 17.0.14 installation
         ├── nodejs/                    # Node.js 20.19.5 installation
-        ├── nginx/                     # Nginx + reverse proxy config
-        └── app-user/                  # App user and directory setup
+        ├── app-user/                  # App user and directory setup
+        ├── docker/                    # Docker CE installation
+        └── traefik/                   # Shared reverse proxy (Docker, path-based routing)
 ```
 
 ---
@@ -112,13 +114,15 @@ Polls the SSH port (22) on the new VM every 10 seconds, up to 5 minutes, before 
 ### 9. Ansible — Configure VM
 Runs the main playbook against the new VM. The following roles execute in order:
 
-| Role       | What it does                                          |
-|------------|-------------------------------------------------------|
-| `base`     | Installs curl, wget, git, xz-utils, ca-certificates  |
-| `java`     | Downloads and installs JDK 17.0.14 (Eclipse Temurin) |
-| `nodejs`   | Downloads and installs Node.js 20.19.5                |
-| `nginx`    | Installs Nginx and configures reverse proxy           |
-| `app-user` | Creates app user, directories, validates installation |
+| Role       | What it does                                                        |
+|------------|----------------------------------------------------------------------|
+| `network`  | Configures static IP via netplan                                     |
+| `base`     | Installs curl, wget, git, xz-utils, ca-certificates                 |
+| `java`     | Downloads and installs JDK 17.0.14 (Eclipse Temurin)                |
+| `nodejs`   | Downloads and installs Node.js 20.19.5                                |
+| `app-user` | Creates app user, directories, validates installation                |
+| `docker`   | Installs Docker CE + Compose plugin, adds app user to `docker` group |
+| `traefik`  | Deploys the shared Traefik reverse proxy (Docker, path-based routing) |
 
 ### Post Actions
 - On **success**: logs the VM IP and confirms the pipeline completed.
@@ -126,16 +130,16 @@ Runs the main playbook against the new VM. The following roles execute in order:
 
 ---
 
-## Nginx Configuration
+## Traefik Configuration
 
-Nginx is configured as both a static file server and a reverse proxy:
+The VM hosts several applications side by side, so instead of each one claiming its own port, Traefik listens on port 80 and routes by URL path, auto-discovering containers via Docker labels declared in each application's own `docker-compose.yml`:
 
 ```
-GET /          → serves Angular build from /var/www/app
-GET /api/*     → proxies to Java backend on localhost:8080
+GET /crochejuka/*  → routed to the crochedajuka frontend/backend containers
+GET /wr13/*        → routed to the wr13 frontend container
 ```
 
-This setup allows the frontend and backend to be served on the same port (80) without CORS issues.
+No config here needs to change when a new application is added to the VM - it just needs to join the external `web` Docker network and declare its own `traefik.*` labels. See `croche-da-juka/infra/traefik/docker-compose.yml` (the canonical reference this role's `files/docker-compose.yml` is copied from) for the exact routing pattern each application should follow.
 
 ---
 
@@ -267,7 +271,8 @@ The public key (`ansible_key.pub`) is added to the VM template's `~/.ssh/authori
 | ngrok       | 3.x      | Webhook tunnel for local Jenkins     |
 | Java        | 17.0.14  | Application runtime (Temurin JDK)    |
 | Node.js     | 20.19.5  | Frontend build tooling               |
-| Nginx       | latest   | Web server and reverse proxy         |
+| Docker CE   | latest   | Container runtime for applications   |
+| Traefik     | v3.1     | Shared reverse proxy (path routing)  |
 | Ubuntu      | 24.04    | Guest OS on provisioned VMs          |
 
 ---

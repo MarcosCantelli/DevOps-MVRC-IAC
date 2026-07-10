@@ -1,0 +1,51 @@
+name: traefik
+
+# Infra COMPARTILHADA da VM - roda UMA VEZ por VM, fora do ciclo de deploy de
+# qualquer aplicação. Provisionado automaticamente por esta role Ansible
+# (traefik/tasks/main.yml). Cópia da referência canônica em
+# croche-da-juka/infra/traefik/docker-compose.yml - qualquer mudança de
+# padrão deve ser feita nos dois lugares.
+#
+# Objetivo: várias aplicações compartilhando a mesma VM, cada uma acessível
+# por path (ex: http://192.168.31.49/crochejuka), em vez de cada uma brigar
+# por uma porta diferente. O Traefik descobre os containers sozinho via
+# labels no docker-compose de cada aplicação (nenhuma config aqui precisa
+# mudar quando uma aplicação nova for adicionada).
+#
+# Cada aplicação entra na rede "web" (como external) e declara labels
+# "traefik.*" no seu próprio docker-compose.
+
+services:
+  # v3.1 (versão original) tinha uma biblioteca cliente Docker antiga demais
+  # pra negociar versão de API com o daemon da VM (que exige no mínimo
+  # 1.40) - a negociação automática sempre caía pro fallback mais antigo
+  # possível (1.24) e nunca completava, então o Traefik nunca conseguia
+  # listar container nenhum (ficava sempre devolvendo 404 próprio, sem
+  # achar nenhuma rota). Setar DOCKER_API_VERSION manualmente NÃO resolve -
+  # a negociação automática ignora essa variável. v3.7 resolve isso de
+  # verdade (biblioteca cliente atualizada).
+  traefik:
+    image: traefik:v3.7
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      # Só expõe containers que tiverem "traefik.enable=true" explícito -
+      # evita expor sem querer algo que não devia (ex: um container de
+      # outro projeto que só usa Docker sem pensar em Traefik).
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      # Painel/API do Traefik só escuta local - acesso via "docker exec"
+      # ou túnel SSH, nunca exposto na rede.
+      - --api.dashboard=true
+      - --api.insecure=false
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web
+
+networks:
+  web:
+    name: web
+    external: true

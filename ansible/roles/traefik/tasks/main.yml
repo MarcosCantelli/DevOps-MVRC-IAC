@@ -1,0 +1,30 @@
+---
+- name: Criar diretório de infra compartilhada do Traefik
+  file:
+    path: /opt/infra/traefik
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: '0755'
+
+- name: Copiar docker-compose.yml do Traefik
+  copy:
+    src: docker-compose.yml
+    dest: /opt/infra/traefik/docker-compose.yml
+    mode: '0644'
+
+# Sem coleção community.docker instalada neste projeto - por isso "command"
+# raw em vez do módulo docker_network, seguindo o mesmo estilo já usado na
+# role docker/ (apt/shell/command puros).
+- name: Criar rede Docker compartilhada "web" (idempotente)
+  command: docker network create web
+  register: traefik_network_create
+  changed_when: traefik_network_create.rc == 0
+  failed_when: >
+    traefik_network_create.rc != 0 and
+    'already exists' not in traefik_network_create.stderr
+
+- name: Subir o Traefik
+  command: docker compose up -d
+  args:
+    chdir: /opt/infra/traefik
