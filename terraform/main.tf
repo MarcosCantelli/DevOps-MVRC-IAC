@@ -1,65 +1,133 @@
-provider "vsphere" {
-    user           = var.vsphere_user          # Username for vSphere authentication
-    password       = var.vsphere_password      # Password for vSphere authentication
-    vsphere_server = var.vsphere_server        # vSphere server address
-
-    allow_unverified_ssl = true                # Allow insecure SSL connections (useful for self-signed certificates)
+provider "oci" {
+  tenancy_ocid     = var.tenancy_ocid
+  user_ocid        = var.user_ocid
+  fingerprint      = var.fingerprint
+  private_key_path = var.private_key_path
+  region           = var.region
 }
 
-# Fetch the datacenter information
-data "vsphere_datacenter" "dc" {
-    name = var.datacenter                      # Name of the datacenter to use
+# Availability Domains disponíveis na tenancy
+data "oci_identity_availability_domains" "ads" {
+  compartment_id = var.tenancy_ocid
 }
 
-# Fetch the datastore information
-data "vsphere_datastore" "datastore" {
-    name          = var.datastore              # Name of the datastore to use
-    datacenter_id = data.vsphere_datacenter.dc.id # Datacenter ID fetched from the datacenter data source
+# Imagem Oracle Linux 9 mais recente compatível com o shape escolhido.
+# A OCI expõe operating_system_version só com o major ("9") - o filtro por
+# TIMECREATED desc pega sempre a build mais nova da série 9.x (hoje, 9.7).
+data "oci_core_images" "oracle_linux" {
+  compartment_id           = var.compartment_ocid
+  operating_system         = "Oracle Linux"
+  operating_system_version = "9"
+  shape                    = var.shape
+  sort_by                  = "TIMECREATED"
+  sort_order               = "DESC"
 }
 
-# Fetch the compute cluster information
-data "vsphere_compute_cluster" "cluster" {
-    name          = var.cluster                # Name of the compute cluster to use
-    datacenter_id = data.vsphere_datacenter.dc.id # Datacenter ID fetched from the datacenter data source
+# --- Rede ---
+
+resource "oci_core_vcn" "vcn" {
+  compartment_id = var.compartment_ocid
+  cidr_block     = var.vcn_cidr
+  display_name   = "${var.vm_name}-vcn"
+  dns_label      = "mvrcvcn"
 }
 
-# Fetch the virtual machine template information
-data "vsphere_virtual_machine" "template" {
-    name          = var.template_name          # Name of the VM template to use
-    datacenter_id = data.vsphere_datacenter.dc.id # Datacenter ID fetched from the datacenter data source
+resource "oci_core_internet_gateway" "igw" {
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.vcn.id
+  display_name   = "${var.vm_name}-igw"
+  enabled        = true
 }
 
-# Fetch the network information
-data "vsphere_network" "network" {
-    name          = var.network                # Name of the network to use
-    datacenter_id = data.vsphere_datacenter.dc.id # Datacenter ID fetched from the datacenter data source
+resource "oci_core_route_table" "rt" {
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.vcn.id
+  display_name   = "${var.vm_name}-rt"
+
+  route_rules {
+    destination       = "0.0.0.0/0"
+    network_entity_id = oci_core_internet_gateway.igw.id
+  }
 }
 
-# Define the virtual machine resource
-resource "vsphere_virtual_machine" "vm" {
-  name             = var.vm_name
-  resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
-  datastore_id     = data.vsphere_datastore.datastore.id
+# Portas liberadas: 22 (SSH/Ansible) e 80/443 (Traefik). Restrinja o CIDR de
+# origem em produção - 0.0.0.0/0 é o padrão simples de laboratório.
+resource "oci_core_security_list" "sl" {
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.vcn.id
+  display_name   = "${var.vm_name}-sl"
 
-  num_cpus                   = var.num_cpus
-  memory                     = var.memory_mb
-  guest_id                   = data.vsphere_virtual_machine.template.guest_id
-  wait_for_guest_net_timeout = 60
-  wait_for_guest_ip_timeout  = 60
-
-  network_interface {
-    network_id   = data.vsphere_network.network.id
-    adapter_type = data.vsphere_virtual_machine.template.network_interface_types[0]
+  egress_security_rules {
+    destination = "0.0.0.0/0"
+    protocol    = "all"
   }
 
-  disk {
-    label            = "disk0"
-    size             = data.vsphere_virtual_machine.template.disks.0.size
-    eagerly_scrub    = data.vsphere_virtual_machine.template.disks.0.eagerly_scrub
-    thin_provisioned = data.vsphere_virtual_machine.template.disks.0.thin_provisioned
+  ingress_security_rules {
+    source   = "0.0.0.0/0"
+    protocol = "6" # TCP
+    tcp_options {
+      min = 22
+      max = 22
+    }
   }
 
-  clone {
-    template_uuid = data.vsphere_virtual_machine.template.id
+  ingress_security_rules {
+    source   = "0.0.0.0/0"
+    protocol = "6" # TCP
+    tcp_options {
+      min = 80
+      max = 80
+    }
+  }
+
+  ingress_security_rules {
+    source   = "0.0.0.0/0"
+    protocol = "6" # TCP
+    tcp_options {
+      min = 443
+      max = 443
+    }
+  }
+}
+
+resource "oci_core_subnet" "subnet" {
+  compartment_id             = var.compartment_ocid
+  vcn_id                     = oci_core_vcn.vcn.id
+  cidr_block                 = var.subnet_cidr
+  display_name               = "${var.vm_name}-subnet"
+  dns_label                  = "mvrcsub"
+  route_table_id             = oci_core_route_table.rt.id
+  security_list_ids          = [oci_core_security_list.sl.id]
+  prohibit_public_ip_on_vnic = false
+}
+
+# --- Instância ---
+
+resource "oci_core_instance" "vm" {
+  compartment_id      = var.compartment_ocid
+  availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
+  shape               = var.shape
+  display_name        = var.vm_name
+
+  source_details {
+    source_type             = "image"
+    source_id               = data.oci_core_images.oracle_linux.images[0].id
+    boot_volume_size_in_gbs = var.boot_volume_size_gb
+  }
+
+  create_vnic_details {
+    subnet_id        = oci_core_subnet.subnet.id
+    assign_public_ip = true
+    hostname_label   = var.vm_name
+  }
+
+  # O usuário padrão da imagem Oracle Linux é "opc" - as duas chaves ficam
+  # autorizadas nele para o primeiro boot. O Ansible cria o usuário "mvrc" e
+  # replica as mesmas chaves para ele logo em seguida.
+  metadata = {
+    ssh_authorized_keys = join("\n", [
+      trimspace(file(pathexpand(var.my_ssh_public_key_path))),
+      trimspace(file(pathexpand(var.jenkins_ssh_public_key_path))),
+    ])
   }
 }

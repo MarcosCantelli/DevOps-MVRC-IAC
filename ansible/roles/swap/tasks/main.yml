@@ -1,0 +1,29 @@
+---
+- name: Verificar se já existe swapfile
+  stat:
+    path: /swapfile
+  register: swapfile_stat
+
+- name: Alocar arquivo de swap de 4GB
+  command: fallocate -l 4G /swapfile
+  when: not swapfile_stat.stat.exists
+
+- name: Ajustar permissões do swapfile
+  file:
+    path: /swapfile
+    mode: '0600'
+  when: not swapfile_stat.stat.exists
+
+- name: Formatar swapfile
+  command: mkswap /swapfile
+  when: not swapfile_stat.stat.exists
+
+- name: Ativar swap
+  command: swapon /swapfile
+  when: not swapfile_stat.stat.exists
+
+- name: Persistir swap no fstab
+  lineinfile:
+    path: /etc/fstab
+    line: '/swapfile none swap sw 0 0'
+    state: present

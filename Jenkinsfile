@@ -6,9 +6,12 @@ pipeline {
     }
 
     environment {
-        TF_VAR_vsphere_user     = credentials('vsphere-user')
-        TF_VAR_vsphere_password = credentials('vsphere-password')
-        STATIC_VM_IP            = '192.168.31.51'
+        TF_VAR_tenancy_ocid                = credentials('oci-tenancy-ocid')
+        TF_VAR_user_ocid                   = credentials('oci-user-ocid')
+        TF_VAR_fingerprint                 = credentials('oci-fingerprint')
+        TF_VAR_private_key_path            = credentials('oci-api-private-key')
+        TF_VAR_my_ssh_public_key_path      = credentials('mvrc-ssh-public-key-path')
+        TF_VAR_jenkins_ssh_public_key_path = credentials('jenkins-ssh-public-key-path')
     }
 
     stages {
@@ -52,15 +55,15 @@ pipeline {
             }
         }
 
-        stage('Capturar IP DHCP da VM') {
+        stage('Capturar IP público da VM') {
             steps {
                 dir('terraform') {
                     script {
                         env.VM_IP = sh(
-                            script: 'terraform output -raw vm_ip_address',
+                            script: 'terraform output -raw vm_public_ip',
                             returnStdout: true
                         ).trim()
-                        echo "IP DHCP da VM: ${env.VM_IP}"
+                        echo "IP público da VM: ${env.VM_IP}"
                     }
                 }
             }
@@ -86,40 +89,19 @@ pipeline {
             }
         }
 
-        stage('Ansible - Configurar VM') {
+        stage('Ansible - Provisionar VM OCI') {
             steps {
                 sh '''
-                    echo "[app_servers]" > ansible/inventory/hosts.ini
-                    echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
+                    echo "[oci_servers]" > ansible/inventory/hosts.ini
+                    echo "''' + env.VM_IP + ''' ansible_user=opc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
                 '''
 
                 sh '''
                     cd ansible
                     ansible-playbook \
                       -i inventory/hosts.ini \
-                      playbooks/configure-vm.yml
+                      playbooks/provision-oci-vm.yml
                 '''
-            }
-        }
-
-        stage('Verificar IP estático') {
-            steps {
-                script {
-                    echo "Verificando se a VM está acessível no IP fixo ${STATIC_VM_IP}..."
-                    sh """
-                        for i in \$(seq 1 18); do
-                            if ping -c 1 -W 3 ${STATIC_VM_IP} 2>/dev/null; then
-                                echo "VM respondendo no IP fixo ${STATIC_VM_IP}"
-                                exit 0
-                            fi
-                            echo "Tentativa \$i/18 — aguardando 10s..."
-                            sleep 10
-                        done
-                        echo "Timeout: VM não responde no IP ${STATIC_VM_IP}"
-                        exit 1
-                    """
-                    sh "nc -zw5 ${STATIC_VM_IP} 22 && echo 'SSH disponível no IP fixo'"
-                }
             }
         }
 
@@ -128,7 +110,7 @@ pipeline {
     post {
         success {
             echo "Pipeline finalizado com sucesso."
-            echo "VM disponível no IP fixo: ${STATIC_VM_IP}"
+            echo "VM disponível no IP: ${env.VM_IP}"
         }
         failure {
             echo "Pipeline falhou. Destruindo VM se existir."

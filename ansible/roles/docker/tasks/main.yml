@@ -1,40 +1,20 @@
 ---
 - name: Instalar dependências para o Docker
-  apt:
+  dnf:
     name:
-      - ca-certificates
-      - curl
-      - gnupg
-      - lsb-release
+      - dnf-utils
     state: present
 
-- name: Criar diretório para chave GPG do Docker
-  file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-
-- name: Adicionar chave GPG oficial do Docker
-  shell: |
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# Docker não publica repositório próprio para Oracle Linux, mas o OL9 é
+# binário-compatível com RHEL/CentOS - o repo do CentOS é a rota
+# documentada/usada na prática para instalar Docker CE em Oracle Linux.
+- name: Adicionar repositório oficial do Docker CE (via repo CentOS, compatível com Oracle Linux)
+  command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
   args:
-    creates: /etc/apt/keyrings/docker.gpg
-
-- name: Adicionar repositório oficial do Docker
-  shell: |
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu \
-    $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-  args:
-    creates: /etc/apt/sources.list.d/docker.list
-
-- name: Atualizar cache após adicionar repositório Docker
-  apt:
-    update_cache: yes
+    creates: /etc/yum.repos.d/docker-ce.repo
 
 - name: Instalar Docker Engine
-  apt:
+  dnf:
     name:
       - docker-ce
       - docker-ce-cli

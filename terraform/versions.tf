@@ -1,8 +1,8 @@
 terraform {
   required_providers {
-    vsphere = {
-      source  = "hashicorp/vsphere"
-      version = "~> 2.6"
+    oci = {
+      source  = "oracle/oci"
+      version = ">= 5.0.0"
     }
   }
   required_version = ">= 1.5.0"

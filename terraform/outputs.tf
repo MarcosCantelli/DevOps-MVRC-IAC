@@ -1,9 +1,9 @@
-output "vm_ip_address" {
-  description = "IP principal da VM criada"
-  value       = vsphere_virtual_machine.vm.default_ip_address
+output "vm_public_ip" {
+  description = "IP público da VM criada na OCI"
+  value       = oci_core_instance.vm.public_ip
 }
 
 output "vm_name" {
   description = "Nome da VM criada"
-  value       = vsphere_virtual_machine.vm.name
+  value       = oci_core_instance.vm.display_name
 }
