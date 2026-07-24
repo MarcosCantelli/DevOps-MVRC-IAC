@@ -6,10 +6,9 @@ pipeline {
     }
 
     environment {
-        TF_VAR_tenancy_ocid                = credentials('oci-tenancy-ocid')
-        TF_VAR_user_ocid                   = credentials('oci-user-ocid')
-        TF_VAR_fingerprint                 = credentials('oci-fingerprint')
-        TF_VAR_private_key_path            = credentials('oci-api-private-key')
+        TF_VAR_ovirt_url                   = credentials('olvm-url')
+        TF_VAR_ovirt_username              = credentials('olvm-username')
+        TF_VAR_ovirt_password              = credentials('olvm-password')
         TF_VAR_my_ssh_public_key_path      = credentials('mvrc-ssh-public-key-path')
         TF_VAR_jenkins_ssh_public_key_path = credentials('jenkins-ssh-public-key-path')
     }
@@ -55,15 +54,15 @@ pipeline {
             }
         }
 
-        stage('Capturar IP público da VM') {
+        stage('Capturar IP da VM') {
             steps {
                 dir('terraform') {
                     script {
                         env.VM_IP = sh(
-                            script: 'terraform output -raw vm_public_ip',
+                            script: 'terraform output -raw vm_ip_address',
                             returnStdout: true
                         ).trim()
-                        echo "IP público da VM: ${env.VM_IP}"
+                        echo "IP estático da VM: ${env.VM_IP}"
                     }
                 }
             }
@@ -89,18 +88,18 @@ pipeline {
             }
         }
 
-        stage('Ansible - Provisionar VM OCI') {
+        stage('Ansible - Provisionar VM OLVM') {
             steps {
                 sh '''
-                    echo "[oci_servers]" > ansible/inventory/hosts.ini
-                    echo "''' + env.VM_IP + ''' ansible_user=opc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
+                    echo "[olvm_servers]" > ansible/inventory/hosts.ini
+                    echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=/var/lib/jenkins/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
                 '''
 
                 sh '''
                     cd ansible
                     ansible-playbook \
                       -i inventory/hosts.ini \
-                      playbooks/provision-oci-vm.yml
+                      playbooks/provision-olvm-vm.yml
                 '''
             }
         }

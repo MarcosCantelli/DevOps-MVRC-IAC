@@ -1,19 +1,26 @@
-# Autenticação OCI (tenancy_ocid, user_ocid, fingerprint, private_key_path) e
-# os caminhos das chaves SSH (my_ssh_public_key_path, jenkins_ssh_public_key_path)
+# Autenticação no OLVM (ovirt_url, ovirt_username, ovirt_password) e os
+# caminhos das chaves SSH (my_ssh_public_key_path, jenkins_ssh_public_key_path)
 # são injetados pelo Jenkins via variáveis TF_VAR_ - NUNCA preencha aqui
 # (repo público).
 
-# Região da tenancy
-region = "sa-saopaulo-1"
+# Lab on-premises com certificado self-signed no Engine
+ovirt_tls_insecure = true
 
-# Compartment onde os recursos serão criados
-compartment_ocid = "ocid1.compartment.oc1..REPLACE_WITH_YOUR_COMPARTMENT_OCID"
+# Cluster e template (IDs/nomes copiados do próprio OLVM Engine)
+cluster_id    = "REPLACE_WITH_YOUR_CLUSTER_ID"
+template_name = "OracleLinux9-cloudinit"
 
-# VM (Always Free: shape AMD, 1 OCPU / 1GB RAM)
-vm_name             = "oci-app-server"
-shape               = "VM.Standard.E2.1.Micro"
-boot_volume_size_gb = 50
+# VM
+vm_name     = "olvm-app-server"
+cpu_cores   = 2
+cpu_sockets = 1
+cpu_threads = 1
+memory_gb   = 2
 
-# Rede
-vcn_cidr    = "10.0.0.0/16"
-subnet_cidr = "10.0.1.0/24"
+# Rede - mesma LAN usada pela VM de produção original (vSphere)
+nic_name      = "eth0"
+vm_ip_address = "REPLACE_WITH_A_FREE_IP_ON_YOUR_LAN"
+vm_netmask    = "255.255.255.0"
+vm_gateway    = "192.168.31.1"
+dns_primary   = "192.168.31.1"
+dns_secondary = "8.8.8.8"
