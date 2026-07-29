@@ -26,11 +26,13 @@ variable "ovirt_tls_insecure" {
   default     = true
 }
 
-# Cluster e template (o OLVM não expõe data source de busca de cluster por
-# nome - o ID precisa ser copiado do próprio Engine)
+# Cluster (o OLVM não expõe data source de busca por nome - o ID precisa ser
+# copiado do próprio Engine). Sensível e injetado via TF_VAR_ pelo Jenkins -
+# é um identificador interno do ambiente, sem motivo pra ficar num repo público.
 variable "cluster_id" {
   description = "ID do cluster OLVM onde a VM será criada"
   type        = string
+  sensitive   = true
 }
 
 variable "template_name" {
@@ -69,16 +71,19 @@ variable "memory_gb" {
   default     = 2
 }
 
-# Rede - IP estático via cloud-init (initialization_nic), sem DHCP no ambiente on-premises
+# Rede - se vm_ip_address for null, a VM sobe em DHCP e o IP é descoberto
+# depois via guest agent (ver ovirt_wait_for_ip em main.tf). Para IP fixo,
+# preencha vm_ip_address no terraform.tfvars.
 variable "nic_name" {
-  description = "Nome da NIC já presente no template (ex: eth0)"
+  description = "Nome da NIC já presente no template (Oracle Linux 9 usa nomes previsíveis, ex: enp1s0, não eth0)"
   type        = string
-  default     = "eth0"
+  default     = "enp1s0"
 }
 
 variable "vm_ip_address" {
-  description = "IP estático a atribuir à VM"
+  description = "IP estático a atribuir à VM. Deixe null para usar DHCP."
   type        = string
+  default     = null
 }
 
 variable "vm_netmask" {

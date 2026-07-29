@@ -145,7 +145,7 @@ O provider oVirt não tem um catálogo de imagens como a OCI — o template prec
 1. Crie uma VM no OLVM, instale Oracle Linux 9 e o pacote `cloud-init` (`dnf install cloud-init`, `systemctl enable cloud-init`).
 2. Rode `virt-sysprep` (ou o processo equivalente) para generalizar a VM e remova qualquer configuração de rede fixa.
 3. No OLVM, use **Make Template** para transformar a VM selada em template. Anote o **nome exato** do template — ele vai em `template_name` no `terraform.tfvars`.
-4. Confirme o nome da NIC do template (geralmente `eth0`) — ele vai em `nic_name`.
+4. Confirme o nome da NIC do template com `ip -o link show` dentro da VM — Oracle Linux 9 usa nomes previsíveis (ex: `enp1s0`), não `eth0`. Esse nome vai em `nic_name`.
 
 ---
 
@@ -168,7 +168,7 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 - Jenkins instalado e rodando na porta `8080`
 - Plugins: `GitHub Integration Plugin`
 - Ferramentas instaladas: `terraform`, `ansible`, `netcat`
-- Par de chaves SSH gerado em `/var/lib/jenkins/.ssh/ansible_key`
+- Par de chaves SSH gerado em `/home/mvrc/.ssh/ansible_key` (Jenkins roda sob o usuário `mvrc` neste ambiente, não um usuário de sistema `jenkins` dedicado)
 
 ### GitHub
 - Webhook do repositório apontando para `https://<ngrok-url>/github-webhook/`
@@ -187,8 +187,9 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 | `olvm-url`                      | Secret text | URL da API do OLVM Engine                                            |
 | `olvm-username`                 | Secret text | Usuário de autenticação no OLVM (ex: `admin@internal`)               |
 | `olvm-password`                 | Secret text | Senha do usuário OLVM                                                |
-| `mvrc-ssh-public-key-path`      | Secret text | Caminho local (no agente Jenkins) para a chave pública SSH pessoal   |
-| `jenkins-ssh-public-key-path`   | Secret text | Caminho local para a chave pública SSH do Jenkins (`ansible_key.pub`) |
+| `olvm-cluster-id`               | Secret text | ID (UUID) do cluster OLVM onde as VMs são criadas                    |
+| `mvrc-ssh-public-key-path`      | Secret text | `/home/mvrc/.ssh/MVRC-PC-PUB.pub` - chave pública pessoal             |
+| `jenkins-ssh-public-key-path`   | Secret text | `/home/mvrc/.ssh/ansible_key.pub` - chave pública do Jenkins          |
 | `github-pat`                    | Secret text | GitHub Personal Access Token                                         |
 
 ---
@@ -208,8 +209,7 @@ git checkout olvm
 ```hcl
 ovirt_tls_insecure = true
 
-cluster_id    = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-template_name = "OracleLinux9-cloudinit"
+template_name = "OracleLinux-Template"
 
 vm_name     = "olvm-app-server"
 cpu_cores   = 2
@@ -217,15 +217,14 @@ cpu_sockets = 1
 cpu_threads = 1
 memory_gb   = 2
 
-nic_name      = "eth0"
-vm_ip_address = "192.168.31.xx"
-vm_netmask    = "255.255.255.0"
-vm_gateway    = "192.168.31.1"
-dns_primary   = "192.168.31.1"
+# Sem vm_ip_address definido, a VM sobe em DHCP e o IP é descoberto via
+# guest agent. Para IP fixo, defina vm_ip_address (+ vm_netmask/vm_gateway).
+nic_name      = "enp1s0"
+dns_primary   = "192.168.31.10"
 dns_secondary = "8.8.8.8"
 ```
 
-> `ovirt_url`, `ovirt_username`, `ovirt_password`, `my_ssh_public_key_path` e `jenkins_ssh_public_key_path` **nunca** são armazenados neste arquivo — este repositório é público. Todos são injetados pelo Jenkins em tempo de execução via variáveis `TF_VAR_`.
+> `ovirt_url`, `ovirt_username`, `ovirt_password`, `cluster_id`, `my_ssh_public_key_path` e `jenkins_ssh_public_key_path` **nunca** são armazenados neste arquivo — este repositório é público. Todos são injetados pelo Jenkins em tempo de execução via variáveis `TF_VAR_`.
 
 ### 3. Start ngrok no servidor Jenkins
 
@@ -243,7 +242,7 @@ Events:        Just the push event
 
 ### 5. Configure as credenciais no Jenkins
 
-Adicione as 5 credenciais OLVM/SSH + o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
+Adicione as 6 credenciais OLVM/SSH + o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
 
 ### 6. Crie o job do pipeline no Jenkins
 

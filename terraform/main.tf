@@ -41,12 +41,18 @@ resource "ovirt_vm" "vm" {
   initialization_hostname      = var.vm_name
   initialization_custom_script = local.cloud_init
 
-  initialization_nic {
-    name = var.nic_name
-    ipv4 {
-      address = var.vm_ip_address
-      netmask = var.vm_netmask
-      gateway = var.vm_gateway
+  # Só configura IP estático via cloud-init quando vm_ip_address é
+  # preenchido. Deixando null, a NIC não é tocada e o template segue com o
+  # comportamento padrão dele (DHCP).
+  dynamic "initialization_nic" {
+    for_each = var.vm_ip_address != null ? [1] : []
+    content {
+      name = var.nic_name
+      ipv4 {
+        address = var.vm_ip_address
+        netmask = var.vm_netmask
+        gateway = var.vm_gateway
+      }
     }
   }
 }
@@ -55,4 +61,22 @@ resource "ovirt_vm" "vm" {
 # resource separado para ligá-la (e desligá-la no destroy).
 resource "ovirt_vm_start" "vm" {
   vm_id = ovirt_vm.vm.id
+}
+
+# Quando não há IP fixo, descobrimos o IP atribuído por DHCP através do
+# guest agent (qemu-guest-agent precisa estar instalado e habilitado no
+# template - ver README). Sem isso, este data source fica esperando pra sempre.
+data "ovirt_wait_for_ip" "vm" {
+  count = var.vm_ip_address == null ? 1 : 0
+  vm_id = ovirt_vm_start.vm.vm_id
+}
+
+locals {
+  vm_dhcp_ip = try(
+    [
+      for iface in tolist(one(data.ovirt_wait_for_ip.vm).interfaces) : tolist(iface.ipv4_addresses)[0]
+      if iface.name == var.nic_name && length(iface.ipv4_addresses) > 0
+    ][0],
+    null
+  )
 }
