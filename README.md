@@ -149,6 +149,34 @@ O provider oVirt não tem um catálogo de imagens como a OCI — o template prec
 
 ---
 
+## Gameserver (VM `gameserver`, Ubuntu)
+
+VM separada para servidores de jogos (Project Zomboid B42 em Docker). Ela é criada por `terraform/gameserver.tf` e configurada pelo playbook `ansible/playbooks/gameserver.yml` (roles `gs_*`), **fora do pipeline do Jenkins** por enquanto.
+
+| Role           | O que faz                                                                    |
+|----------------|--------------------------------------------------------------------------------|
+| `gs_base`      | apt upgrade, unattended-upgrades, fail2ban, usuário `games` sem sudo, SSH só por chave |
+| `gs_firewall`  | UFW: deny incoming; SSH só da `mgmt_cidr` e da tailnet; UDP 16261-16262 só em `tailscale0` |
+| `gs_tailscale` | Repositório oficial, `tailscale up` com authkey do Vault, `tag:gameserver`; IP no fact `gs_tailscale_ip` |
+| `gs_docker`    | Docker CE oficial, log rotation, bind padrão em 127.0.0.1                       |
+| `gs_zomboid`   | Imagem própria (steamcmd, não-root), portas publicadas **só no IP do Tailscale** |
+| `gs_backup`    | Timer diário: avisa, para, `tar.gz`, sobe; 7 dias locais + rsync; libera o update |
+
+> O Docker ignora o UFW ao publicar portas. Por isso toda porta de jogo é publicada no IP do Tailscale, nunca em `0.0.0.0`.
+
+Segredos (`tailscale_authkey`, `zomboid_password`, `zomboid_admin_password`) ficam em `ansible/inventory/group_vars/gameservers/vault.yml`, criptografado com `ansible-vault` e **fora do Git** (`.gitignore`, porque o repo é público). Use o `vault.example.yml` como modelo.
+
+```bash
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+cp inventory/group_vars/gameservers/vault.example.yml inventory/group_vars/gameservers/vault.yml
+ansible-vault encrypt inventory/group_vars/gameservers/vault.yml   # depois: ansible-vault edit
+# preencha ansible_host em inventory/hosts.yml (terraform output gameserver_ip_address)
+ansible-playbook -i inventory/hosts.yml playbooks/gameserver.yml --ask-vault-pass --check --diff
+```
+
+---
+
 ## Traefik Configuration
 
 A VM hospeda várias aplicações lado a lado, então em vez de cada uma reivindicar sua própria porta, o Traefik escuta na porta 80 e roteia por path, descobrindo os containers automaticamente via labels do Docker declaradas no `docker-compose.yml` de cada aplicação:
