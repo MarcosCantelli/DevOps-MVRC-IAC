@@ -1,0 +1,100 @@
+---
+- name: Garantir que mgmt_cidr foi definido
+  ansible.builtin.assert:
+    that:
+      - mgmt_cidr is defined
+      - mgmt_cidr is string
+      - "'/' in mgmt_cidr"
+    fail_msg: "Defina mgmt_cidr (ex: 192.168.31.0/24) em group_vars/gameservers/vars.yml."
+    quiet: true
+
+- name: Instalar o UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+# --- Anti-lockout -------------------------------------------------------------
+# Antes de aplicar "deny incoming", confere se a conexão SSH que o próprio
+# Ansible está usando vem da LAN de gerência ou da tailnet. Se não vier, o
+# firewall cortaria o acesso, então a role para aqui. Roda sem become porque
+# o sudo descarta a variável SSH_CLIENT.
+- name: Descobrir o IP de origem da conexão SSH atual
+  ansible.builtin.command: printenv SSH_CLIENT
+  become: false
+  register: gs_firewall_ssh_client
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Verificar se a origem da conexão será liberada pelo firewall
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import ipaddress, sys
+        ip = ipaddress.ip_address(sys.argv[1])
+        nets = [ipaddress.ip_network(n, strict=False) for n in sys.argv[2:]]
+        sys.exit(0 if any(ip in n for n in nets if n.version == ip.version) else 1)
+      - "{{ (gs_firewall_ssh_client.stdout.split() | first) | default('0.0.0.0', true) }}"
+      - "{{ mgmt_cidr }}"
+      - "{{ gs_firewall_tailnet_ranges[0] }}"
+      - "{{ gs_firewall_tailnet_ranges[1] }}"
+  register: gs_firewall_origin_check
+  changed_when: false
+  failed_when: gs_firewall_origin_check.rc not in [0, 1]
+  check_mode: false
+
+- name: Abortar se o firewall fosse trancar a conexão atual
+  ansible.builtin.assert:
+    that: gs_firewall_origin_check.rc == 0
+    fail_msg: >-
+      A conexão atual vem de {{ gs_firewall_ssh_client.stdout.split() | first | default('origem desconhecida') }},
+      fora de mgmt_cidr ({{ mgmt_cidr }}) e da tailnet. Ativar o UFW agora
+      trancaria o acesso. Ajuste mgmt_cidr ou rode a partir da LAN de gerência.
+    quiet: true
+
+# --- Regras (criadas ANTES de ativar o deny padrão) --------------------------
+- name: Liberar SSH a partir da LAN de gerência
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ mgmt_cidr }}"
+    to_port: "{{ gs_firewall_ssh_port }}"
+    proto: tcp
+    comment: "SSH - LAN de gerencia"
+
+- name: Liberar SSH pela interface do Tailscale
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: "{{ gs_firewall_tailscale_iface }}"
+    to_port: "{{ gs_firewall_ssh_port }}"
+    proto: tcp
+    comment: "SSH - tailnet"
+
+# Obs.: portas publicadas pelo Docker NÃO passam por estas regras (o Docker
+# escreve direto no iptables). Por isso a role gs_zomboid publica as portas
+# só no IP do Tailscale. Esta regra cobre o caso de o servidor rodar fora do
+# Docker no futuro.
+- name: Liberar portas UDP do Project Zomboid somente pela interface do Tailscale
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: "{{ gs_firewall_tailscale_iface }}"
+    to_port: "{{ gs_firewall_zomboid_ports }}"
+    proto: udp
+    comment: "Project Zomboid - tailnet"
+
+- name: Política padrão - negar entrada
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Política padrão - permitir saída
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Ativar o UFW
+  community.general.ufw:
+    state: enabled
