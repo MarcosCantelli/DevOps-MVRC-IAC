@@ -12,6 +12,10 @@ pipeline {
         TF_VAR_cluster_id                  = credentials('olvm-cluster-id')
         TF_VAR_my_ssh_public_key_path      = credentials('mvrc-ssh-public-key-path')
         TF_VAR_jenkins_ssh_public_key_path = credentials('jenkins-ssh-public-key-path')
+
+        // Chave privada usada pelo Ansible. O Jenkins roda como o usuário
+        // "jenkins", que não lê /home/mvrc/.ssh - o par fica na home dele.
+        ANSIBLE_SSH_PRIVATE_KEY            = '/var/lib/jenkins/.ssh/ansible_key'
     }
 
     stages {
@@ -93,7 +97,7 @@ pipeline {
             steps {
                 sh '''
                     echo "[olvm_servers]" > ansible/inventory/hosts.ini
-                    echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=/home/mvrc/.ssh/ansible_key ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
+                    echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=$ANSIBLE_SSH_PRIVATE_KEY ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
                 '''
 
                 sh '''

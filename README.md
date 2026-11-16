@@ -214,7 +214,9 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 - Jenkins instalado e rodando na porta `8080`
 - Plugins: `GitHub Integration Plugin`
 - Ferramentas instaladas: `terraform`, `ansible`, `netcat`
-- Par de chaves SSH gerado em `/home/mvrc/.ssh/ansible_key` (Jenkins roda sob o usuário `mvrc` neste ambiente, não um usuário de sistema `jenkins` dedicado)
+- O Jenkins roda como o usuário de sistema `jenkins` (home `/var/lib/jenkins`), que **não** lê `/home/mvrc/.ssh`. Por isso as chaves usadas pelo pipeline ficam na home dele:
+  - par do Ansible: `/var/lib/jenkins/.ssh/ansible_key` (+ `.pub`), gerado como `jenkins` (`ANSIBLE_SSH_PRIVATE_KEY` no Jenkinsfile)
+  - sua chave pública pessoal: cópia em `/var/lib/jenkins/.ssh/mvrc-pc.pub`
 
 ### GitHub
 - Webhook do repositório apontando para `https://<ngrok-url>/github-webhook/`
@@ -234,8 +236,8 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 | `olvm-username`                 | Secret text | Usuário de autenticação no OLVM (ex: `admin@internal`)               |
 | `olvm-password`                 | Secret text | Senha do usuário OLVM                                                |
 | `olvm-cluster-id`               | Secret text | ID (UUID) do cluster OLVM onde as VMs são criadas                    |
-| `mvrc-ssh-public-key-path`      | Secret text | `/home/mvrc/.ssh/MVRC-PC-PUB.pub` - chave pública pessoal             |
-| `jenkins-ssh-public-key-path`   | Secret text | `/home/mvrc/.ssh/ansible_key.pub` - chave pública do Jenkins          |
+| `mvrc-ssh-public-key-path`      | Secret text | `/var/lib/jenkins/.ssh/mvrc-pc.pub` - chave pública pessoal          |
+| `jenkins-ssh-public-key-path`   | Secret text | `/var/lib/jenkins/.ssh/ansible_key.pub` - chave pública do Jenkins   |
 | `github-pat`                    | Secret text | GitHub Personal Access Token                                         |
 
 ---
