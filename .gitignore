@@ -11,6 +11,16 @@ override.tf
 *.retry
 ansible/inventory/hosts_generated.yml
 
+# Ansible Vault - repo público: nenhum segredo vai para o Git, nem
+# criptografado. Só o modelo vault.example.yml (sem valores) é versionado.
+ansible/inventory/group_vars/*/vault.yml
+.vault_pass*
+*.vault_pass
+*vault-password*
+
+# Cache de coleções/ansible-lint
+.ansible/
+
 # Sistema
 .DS_Store
 *.log
