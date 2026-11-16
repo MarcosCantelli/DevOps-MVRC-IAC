@@ -21,3 +21,14 @@ memory_gb   = 2
 nic_name      = "enp1s0"
 dns_primary   = "192.168.31.10"
 dns_secondary = "8.8.8.8"
+
+# Gameserver (ver gameserver.tf). O vnic_profile_id é injetado pelo Jenkins via
+# TF_VAR_vnic_profile_id - NUNCA preencha aqui.
+gameserver_template_name = "Ubuntu-Terraform"
+gameserver_vm_name       = "gameserver"
+gameserver_cpu_sockets   = 1
+gameserver_cpu_cores     = 8
+gameserver_cpu_threads   = 1
+gameserver_memory_gb     = 8
+gameserver_disk_size_gb  = 60
+gameserver_nic_name      = "enp1s0"

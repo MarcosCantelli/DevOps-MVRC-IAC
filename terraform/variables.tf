@@ -123,3 +123,83 @@ variable "jenkins_ssh_public_key_path" {
   type        = string
   sensitive   = true
 }
+
+# Rede compartilhada - vNIC profile (rede lógica) das VMs. A VM de aplicação
+# herda a NIC do template, mas o template Ubuntu do gameserver não tem NIC, então
+# ela é criada via ovirt_nic, que exige o ID do profile (o provider não tem
+# data source de busca por nome). Mesmo tratamento do cluster_id: ID interno
+# do ambiente, injetado via TF_VAR_ pelo Jenkins.
+variable "vnic_profile_id" {
+  description = "ID do vNIC profile (mesma rede das outras VMs) usado nas NICs criadas pelo Terraform"
+  type        = string
+  sensitive   = true
+}
+
+# Gameserver - VM dedicada a servidores de jogos (ver gameserver.tf)
+variable "gameserver_template_name" {
+  description = "Nome do template Ubuntu (BIOS, sem NIC, com cloud-init e qemu-guest-agent) no OLVM"
+  type        = string
+  default     = "Ubuntu-Terraform"
+}
+
+variable "gameserver_vm_name" {
+  description = "Nome (e hostname) da VM de servidor de jogos"
+  type        = string
+  default     = "gameserver"
+}
+
+variable "gameserver_cpu_sockets" {
+  description = "Sockets de CPU do gameserver"
+  type        = number
+  default     = 1
+}
+
+variable "gameserver_cpu_cores" {
+  description = "Núcleos de CPU por socket do gameserver"
+  type        = number
+  default     = 8
+}
+
+variable "gameserver_cpu_threads" {
+  description = "Threads por núcleo do gameserver"
+  type        = number
+  default     = 1
+}
+
+variable "gameserver_memory_gb" {
+  description = "Memória RAM do gameserver em GiB (usada em memory e maximum_memory)"
+  type        = number
+  default     = 8
+}
+
+variable "gameserver_disk_size_gb" {
+  description = "Tamanho final do disco do gameserver em GiB (só aumenta, nunca reduz)"
+  type        = number
+  default     = 60
+}
+
+variable "gameserver_nic_name" {
+  description = "Nome da NIC dentro do guest Ubuntu (confirme com ip -o link: enp1s0 em Q35, ens3 em i440fx)"
+  type        = string
+  default     = "enp1s0"
+}
+
+variable "gameserver_ip_address" {
+  description = "IP estático do gameserver. Deixe null para usar DHCP (IP descoberto via guest agent)."
+  type        = string
+  default     = null
+}
+
+# Preparada para o futuro: o provider oVirt 2.2.0 não suporta host devices,
+# então a variável ainda não tem efeito. A validação impede habilitá-la por
+# engano achando que a GPU foi anexada. Ver comentário em gameserver.tf.
+variable "gameserver_gpu_passthrough" {
+  description = "Habilita GPU passthrough no gameserver (ainda não suportado pelo provider)"
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.gameserver_gpu_passthrough
+    error_message = "gameserver_gpu_passthrough = true ainda não é suportado: o provider oVirt 2.2.0 não gerencia host devices."
+  }
+}
