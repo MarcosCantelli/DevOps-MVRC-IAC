@@ -113,9 +113,19 @@ pipeline {
             echo "VM disponível no IP: ${env.VM_IP}"
         }
         failure {
-            echo "Pipeline falhou. Destruindo VM se existir."
-            dir('terraform') {
-                sh 'terraform destroy -auto-approve || true'
+            script {
+                // Se a falha acontecer antes de algum stage (ex: credencial
+                // inexistente no bloco environment), o post roda sem node e
+                // sem workspace: não há nada a destruir, e o dir() lançaria
+                // MissingContextVariableException, escondendo o erro real.
+                try {
+                    dir('terraform') {
+                        echo "Pipeline falhou. Destruindo VM se existir."
+                        sh 'terraform destroy -auto-approve || true'
+                    }
+                } catch (org.jenkinsci.plugins.workflow.steps.MissingContextVariableException e) {
+                    echo "Pipeline falhou antes de alocar o workspace (ex: credencial ausente) - nada para destruir. Veja o erro no fim do log."
+                }
             }
         }
     }
