@@ -1,0 +1,101 @@
+---
+# Trava de segurança: sem IP do Tailscale, o compose publicaria as portas
+# no lugar errado. O fact vem da role gs_tailscale.
+- name: Garantir que o IP do Tailscale está disponível
+  ansible.builtin.assert:
+    that:
+      - gs_tailscale_ip is defined
+      - gs_tailscale_ip | length > 0
+      - gs_tailscale_ip != '0.0.0.0'
+    fail_msg: "gs_tailscale_ip não definido - rode a role gs_tailscale antes desta."
+    quiet: true
+
+- name: Ler UID/GID do usuário de serviço
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ gameserver_user }}"
+
+- name: Registrar UID/GID do usuário de serviço
+  ansible.builtin.set_fact:
+    gs_zomboid_uid: "{{ ansible_facts['getent_passwd'][gameserver_user][1] }}"
+    gs_zomboid_gid: "{{ ansible_facts['getent_passwd'][gameserver_user][2] }}"
+
+- name: Criar diretórios do Zomboid (dono = usuário de serviço)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ gameserver_user }}"
+    group: "{{ gameserver_user }}"
+    mode: "0750"
+  loop:
+    - "{{ gs_zomboid_dir }}"
+    - "{{ gs_zomboid_dir }}/data"
+    - "{{ gs_zomboid_dir }}/data/server"
+    - "{{ gs_zomboid_dir }}/data/Zomboid"
+    - "{{ gs_zomboid_dir }}/state"
+
+# Config com senha: root é dono, o grupo do usuário de serviço só lê.
+- name: Criar diretório de configuração gerenciada
+  ansible.builtin.file:
+    path: "{{ gs_zomboid_dir }}/config"
+    state: directory
+    owner: root
+    group: "{{ gameserver_user }}"
+    mode: "0750"
+
+- name: Copiar Dockerfile
+  ansible.builtin.copy:
+    src: Dockerfile
+    dest: "{{ gs_zomboid_dir }}/Dockerfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: gs_zomboid_dockerfile
+
+- name: Copiar entrypoint
+  ansible.builtin.copy:
+    src: entrypoint.sh
+    dest: "{{ gs_zomboid_dir }}/entrypoint.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  register: gs_zomboid_entrypoint
+
+# diff: false nos arquivos com segredo, para o --diff não imprimir senha.
+- name: Gerar chaves gerenciadas do servidor (servertest.ini)
+  ansible.builtin.template:
+    src: servertest.ini.j2
+    dest: "{{ gs_zomboid_dir }}/config/servertest.ini"
+    owner: root
+    group: "{{ gameserver_user }}"
+    mode: "0640"
+  diff: false
+  notify: Reiniciar zomboid
+
+- name: Gerar .env com a senha de admin
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ gs_zomboid_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  diff: false
+
+- name: Gerar compose.yaml
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ gs_zomboid_dir }}/compose.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Idempotente: o compose só recria o container se a config mudou e só
+# reconstrói a imagem se o Dockerfile ou o entrypoint mudaram.
+- name: Construir a imagem e subir o servidor
+  community.docker.docker_compose_v2:
+    project_src: "{{ gs_zomboid_dir }}"
+    build: "{{ 'always' if (gs_zomboid_dockerfile is changed or gs_zomboid_entrypoint is changed) else 'policy' }}"
+    remove_orphans: true
+    state: present
+  register: gs_zomboid_compose
+  ignore_errors: "{{ ansible_check_mode }}"

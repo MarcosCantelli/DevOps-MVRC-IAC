@@ -1,0 +1,11 @@
+---
+# Restart necessário para o entrypoint reaplicar as chaves do .ini. O
+# SIGTERM vira "quit" no console, então o mundo é salvo antes de parar.
+# Se o compose acabou de (re)criar o container neste run, o .ini novo já foi
+# aplicado no start - reiniciar só interromperia o steamcmd à toa.
+- name: Reiniciar zomboid
+  community.docker.docker_compose_v2:
+    project_src: "{{ gs_zomboid_dir }}"
+    state: restarted
+  when: not (gs_zomboid_compose is changed)
+  ignore_errors: "{{ ansible_check_mode }}"
