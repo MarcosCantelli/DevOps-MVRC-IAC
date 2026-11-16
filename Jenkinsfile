@@ -10,11 +10,12 @@ pipeline {
         TF_VAR_ovirt_username              = credentials('olvm-username')
         TF_VAR_ovirt_password              = credentials('olvm-password')
         TF_VAR_cluster_id                  = credentials('olvm-cluster-id')
-        TF_VAR_my_ssh_public_key_path      = credentials('mvrc-ssh-public-key-path')
-        TF_VAR_jenkins_ssh_public_key_path = credentials('jenkins-ssh-public-key-path')
 
-        // Chave privada usada pelo Ansible. O Jenkins roda como o usuário
-        // "jenkins", que não lê /home/mvrc/.ssh - o par fica na home dele.
+        // Chaves SSH na home do usuário "jenkins" (ele não lê /home/mvrc/.ssh).
+        // São só CAMINHOS, não segredos (já documentados no README), então
+        // ficam aqui direto em vez de em credenciais do Jenkins.
+        TF_VAR_my_ssh_public_key_path      = '/var/lib/jenkins/.ssh/mvrc-pc.pub'
+        TF_VAR_jenkins_ssh_public_key_path = '/var/lib/jenkins/.ssh/ansible_key.pub'
         ANSIBLE_SSH_PRIVATE_KEY            = '/var/lib/jenkins/.ssh/ansible_key'
     }
 

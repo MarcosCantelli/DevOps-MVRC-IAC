@@ -236,8 +236,6 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 | `olvm-username`                 | Secret text | Usuário de autenticação no OLVM (ex: `admin@internal`)               |
 | `olvm-password`                 | Secret text | Senha do usuário OLVM                                                |
 | `olvm-cluster-id`               | Secret text | ID (UUID) do cluster OLVM onde as VMs são criadas                    |
-| `mvrc-ssh-public-key-path`      | Secret text | `/var/lib/jenkins/.ssh/mvrc-pc.pub` - chave pública pessoal          |
-| `jenkins-ssh-public-key-path`   | Secret text | `/var/lib/jenkins/.ssh/ansible_key.pub` - chave pública do Jenkins   |
 | `github-pat`                    | Secret text | GitHub Personal Access Token                                         |
 
 ---
@@ -272,7 +270,7 @@ dns_primary   = "192.168.31.10"
 dns_secondary = "8.8.8.8"
 ```
 
-> `ovirt_url`, `ovirt_username`, `ovirt_password`, `cluster_id`, `my_ssh_public_key_path` e `jenkins_ssh_public_key_path` **nunca** são armazenados neste arquivo — este repositório é público. Todos são injetados pelo Jenkins em tempo de execução via variáveis `TF_VAR_`.
+> `ovirt_url`, `ovirt_username`, `ovirt_password`, `cluster_id`, `my_ssh_public_key_path` e `jenkins_ssh_public_key_path` **nunca** são armazenados neste arquivo. Os quatro primeiros vêm de credenciais do Jenkins (repo público), e os caminhos das chaves vêm do `environment` do Jenkinsfile — todos como variáveis `TF_VAR_`.
 
 ### 3. Start ngrok no servidor Jenkins
 
@@ -290,7 +288,7 @@ Events:        Just the push event
 
 ### 5. Configure as credenciais no Jenkins
 
-Adicione as 6 credenciais OLVM/SSH + o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
+Adicione as 4 credenciais OLVM + o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
 
 ### 6. Crie o job do pipeline no Jenkins
 
@@ -307,7 +305,7 @@ Push de qualquer commit na branch configurada (ou execute manualmente pelo Jenki
 
 ## Security Considerations
 
-- Credenciais OLVM (URL, usuário, senha) e os caminhos das chaves SSH ficam nos Secrets do Jenkins e são injetados como variáveis `TF_VAR_` — nunca aparecem em código ou logs.
+- Credenciais OLVM (URL, usuário, senha, cluster) ficam nos Secrets do Jenkins e são injetadas como variáveis `TF_VAR_` — nunca aparecem em código ou logs. Os caminhos das chaves SSH públicas ficam no próprio Jenkinsfile (são caminhos, não segredos).
 - O `.gitignore` exclui todos os arquivos de state do Terraform (`*.tfstate`), planos (`*.tfplan`) e o cache `.terraform/`.
 - Acesso SSH às VMs provisionadas usa apenas autenticação por chave.
 - O usuário `mvrc` é criado com sudo sem senha apenas para simplificar a automação em ambiente de laboratório — avalie restringir isso em produção.
