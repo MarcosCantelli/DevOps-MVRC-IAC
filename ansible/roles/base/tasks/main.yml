@@ -1,12 +1,11 @@
 ---
 - name: Instalar pacotes essenciais
-  apt:
+  dnf:
     name:
-      - cifs-utils
       - curl
       - wget
       - unzip
       - git
-      - xz-utils
+      - xz
       - ca-certificates
     state: present

@@ -1,0 +1,12 @@
+---
+gs_zomboid_dir: "{{ gameserver_root }}/zomboid"
+gs_zomboid_project: zomboid
+gs_zomboid_container: zomboid
+# -servername define o nome do .ini: ~/Zomboid/Server/<servername>.ini
+gs_zomboid_servername: gameserver
+gs_zomboid_java_xmx: 6g
+gs_zomboid_max_players: 8
+gs_zomboid_default_port: 16261
+gs_zomboid_udp_port: 16262
+gs_zomboid_workshop_items: []
+gs_zomboid_mods: []

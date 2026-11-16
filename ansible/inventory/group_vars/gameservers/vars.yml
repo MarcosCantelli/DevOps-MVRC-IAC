@@ -1,0 +1,18 @@
+---
+# Variáveis NÃO sensíveis do grupo gameservers. Segredos ficam em vault.yml
+# (criptografado com ansible-vault e fora do Git - ver vault.example.yml).
+
+# Usuário de serviço (sem sudo) e raiz dos servidores de jogos na VM
+gameserver_user: games
+gameserver_root: /opt/gameserver
+
+# LAN de gerência: única origem (além da tailnet) com SSH liberado no UFW
+mgmt_cidr: "192.168.31.0/24"
+
+# Destino do rsync dos backups (ex: "backup@nas.mvrc.local:/backups/gameserver/"
+# ou um caminho local montado). Vazio = só backup local.
+backup_target: ""
+
+# Project Zomboid - IDs do Workshop e dos mods (listas vazias por enquanto)
+gs_zomboid_workshop_items: []
+gs_zomboid_mods: []

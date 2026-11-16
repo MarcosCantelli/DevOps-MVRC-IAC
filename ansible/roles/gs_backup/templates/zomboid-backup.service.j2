@@ -1,0 +1,11 @@
+# {{ ansible_managed }} (role gs_backup)
+[Unit]
+Description=Backup do Project Zomboid (para, compacta, sobe, libera update)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/zomboid-backup
+ExecStart=/usr/local/sbin/zomboid-backup
+TimeoutStartSec=2h

@@ -1,0 +1,17 @@
+---
+gs_base_packages:
+  - unattended-upgrades
+  - fail2ban
+  # backend systemd do fail2ban (o Ubuntu 24.04 não tem /var/log/auth.log
+  # sem rsyslog, e o backend padrão do jail sshd quebraria)
+  - python3-systemd
+  # exigido pelo módulo deb822_repository (repos Tailscale/Docker)
+  - python3-debian
+  - htop
+  - tmux
+  - curl
+  - ca-certificates
+
+# Drop-in com prefixo baixo: no sshd vale o PRIMEIRO valor lido, e o Ubuntu
+# inclui sshd_config.d/*.conf em ordem alfabética (o cloud-init usa 50-).
+gs_base_sshd_dropin: /etc/ssh/sshd_config.d/01-gameserver-hardening.conf

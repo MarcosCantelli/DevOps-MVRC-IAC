@@ -1,0 +1,20 @@
+---
+- name: Garantir que o firewalld está em execução
+  systemd:
+    name: firewalld
+    state: started
+    enabled: yes
+
+- name: Abrir porta HTTP (80) para o Traefik
+  firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Abrir porta HTTPS (443) para uso futuro (TLS)
+  firewalld:
+    service: https
+    permanent: yes
+    state: enabled
+    immediate: yes

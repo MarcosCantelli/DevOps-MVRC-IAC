@@ -1,0 +1,15 @@
+---
+- name: Recarregar systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Reiniciar docker
+  ansible.builtin.systemd_service:
+    name: docker
+    state: restarted
+  # Em --check no primeiro run o serviço ainda não existe
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Aplicar sysctl
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/60-gameserver-nonlocal-bind.conf
+  changed_when: true

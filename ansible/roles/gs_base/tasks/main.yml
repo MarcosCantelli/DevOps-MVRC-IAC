@@ -1,0 +1,158 @@
+---
+- name: Garantir que o host é Ubuntu/Debian
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] == 'Debian'
+    fail_msg: "As roles gs_* usam apt/UFW e foram feitas para o template Ubuntu."
+    quiet: true
+
+- name: Atualizar cache do apt e aplicar atualizações pendentes
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: safe
+
+- name: Instalar pacotes essenciais
+  ansible.builtin.apt:
+    name: "{{ gs_base_packages }}"
+    state: present
+
+# --- Atualizações automáticas de segurança ---------------------------------
+- name: Habilitar unattended-upgrades (atualização diária de segurança)
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      // Gerenciado pelo Ansible (role gs_base)
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Garantir o serviço unattended-upgrades ativo
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    state: started
+    enabled: true
+
+# --- fail2ban ----------------------------------------------------------------
+- name: Configurar jail do sshd no fail2ban
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      # Gerenciado pelo Ansible (role gs_base)
+      [DEFAULT]
+      bantime  = 1h
+      findtime = 10m
+      maxretry = 5
+      # LAN de gerência nunca é banida (evita se trancar fora por engano)
+      ignoreip = 127.0.0.1/8 ::1 {{ mgmt_cidr }}
+
+      [sshd]
+      enabled = true
+      backend = systemd
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reiniciar fail2ban
+
+- name: Garantir o fail2ban ativo
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    state: started
+    enabled: true
+
+# --- Usuário de serviço "games" ----------------------------------------------
+# No Ubuntu, "games" (uid 5 / gid 60) já existe como usuário de sistema, com
+# shell nologin. A role só garante o estado: sem grupos extras (logo sem
+# sudo e sem docker) e sem login interativo. O UID real é lido depois pela
+# role gs_zomboid para o container rodar com o mesmo dono dos volumes.
+- name: Garantir o grupo do usuário de serviço
+  ansible.builtin.group:
+    name: "{{ gameserver_user }}"
+    system: true
+    state: present
+
+- name: Garantir o usuário de serviço sem sudo e sem login
+  ansible.builtin.user:
+    name: "{{ gameserver_user }}"
+    group: "{{ gameserver_user }}"
+    groups: ""
+    append: false
+    shell: /usr/sbin/nologin
+    system: true
+    create_home: false
+    state: present
+
+- name: Garantir que o usuário de serviço não tem regra de sudo própria
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ gameserver_user }}"
+    state: absent
+
+- name: Criar diretório raiz dos servidores de jogos
+  ansible.builtin.file:
+    path: "{{ gameserver_root }}"
+    state: directory
+    owner: "{{ gameserver_user }}"
+    group: "{{ gameserver_user }}"
+    mode: "0750"
+
+# --- SSH: só chave, sem root (sem se trancar fora) ---------------------------
+# Antes de desligar a senha, garante que o usuário que o Ansible está usando
+# tem pelo menos uma chave autorizada. Se não tiver, para aqui.
+- name: Ler authorized_keys do usuário de conexão do Ansible
+  ansible.builtin.stat:
+    path: "~{{ ansible_user }}/.ssh/authorized_keys"
+  register: gs_base_authorized_keys
+
+- name: Garantir que existe chave SSH autorizada antes de desligar senha
+  ansible.builtin.assert:
+    that:
+      - gs_base_authorized_keys.stat.exists
+      - gs_base_authorized_keys.stat.size > 0
+    fail_msg: >-
+      ~{{ ansible_user }}/.ssh/authorized_keys não existe ou está vazio.
+      Desligar PasswordAuthentication agora trancaria o acesso. Abortando.
+    quiet: true
+
+# No Ubuntu 24.04 o sshd é ativado por socket e /run/sshd só existe depois da
+# primeira conexão. Sem esse diretório, "sshd -t" falha mesmo com config válida.
+- name: Garantir diretório de privilege separation do sshd
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# validate: o arquivo só é gravado se o sshd aceitar a sintaxe. Depois, o
+# handler valida a config COMPLETA (sshd -t) e só reinicia se passar.
+- name: Aplicar hardening do sshd (só chave, sem root)
+  ansible.builtin.template:
+    src: sshd-hardening.conf.j2
+    dest: "{{ gs_base_sshd_dropin }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Validar e reiniciar ssh
+
+- name: Aplicar handlers pendentes do ssh antes de conferir a config efetiva
+  ansible.builtin.meta: flush_handlers
+
+- name: Ler a configuração efetiva do sshd
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: gs_base_sshd_effective
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+# Confirma que nenhum outro drop-in (ex: 50-cloud-init.conf) venceu o nosso.
+- name: Conferir que senha e root estão realmente desligados
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in gs_base_sshd_effective.stdout_lines"
+      - "'permitrootlogin no' in gs_base_sshd_effective.stdout_lines"
+      - "'pubkeyauthentication yes' in gs_base_sshd_effective.stdout_lines"
+    fail_msg: "A configuração efetiva do sshd não está como esperado - confira /etc/ssh/sshd_config.d/."
+    quiet: true
+  when: not ansible_check_mode

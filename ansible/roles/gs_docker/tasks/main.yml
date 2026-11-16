@@ -1,0 +1,123 @@
+---
+# Instalação conforme https://docs.docker.com/engine/install/ubuntu/
+- name: Remover pacotes Docker não oficiais que conflitam com o Docker CE
+  ansible.builtin.apt:
+    name: "{{ gs_docker_conflicting_packages }}"
+    state: absent
+
+- name: Garantir diretório de keyrings do apt
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Baixar chave do repositório oficial do Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: "{{ gs_docker_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# deb822_repository não atualiza o cache sozinho: o apt de instalação faz o
+# update quando o repositório acabou de mudar. Precisa de python3-debian.
+- name: Adicionar repositório oficial do Docker
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: stable
+    architectures: "{{ gs_docker_arch_map[ansible_facts['architecture']] }}"
+    signed_by: "{{ gs_docker_keyring }}"
+    state: present
+  register: gs_docker_repo
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# A configuração vem ANTES da instalação, para o Docker já subir com ela no
+# primeiro start (log-opts só valem para containers criados depois).
+- name: Garantir diretório de configuração do Docker
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configurar daemon do Docker (log rotation + bind padrão em 127.0.0.1)
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: "{{ gs_docker_daemon_config | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reiniciar docker
+
+# As portas de jogo são publicadas no IP do Tailscale. No boot, se o Docker
+# subir antes do tailscaled ter o IP, o bind falharia e o container não
+# subiria. Duas proteções:
+#   1. docker.service espera o tailscaled (ordem de boot);
+#   2. ip_nonlocal_bind permite bind num IP que ainda não existe na interface.
+- name: Garantir diretório de drop-ins do docker.service
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Criar drop-in do docker.service para subir depois do tailscaled
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/10-after-tailscale.conf
+    content: |
+      # Gerenciado pelo Ansible (role gs_docker)
+      [Unit]
+      Wants=tailscaled.service
+      After=tailscaled.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Recarregar systemd
+    - Reiniciar docker
+
+- name: Permitir bind em IP ainda não atribuído (IP do Tailscale no boot)
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/60-gameserver-nonlocal-bind.conf
+    content: |
+      # Gerenciado pelo Ansible (role gs_docker)
+      net.ipv4.ip_nonlocal_bind = 1
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Aplicar sysctl
+
+- name: Instalar Docker Engine + compose plugin
+  ansible.builtin.apt:
+    name: "{{ gs_docker_packages }}"
+    state: present
+    update_cache: "{{ gs_docker_repo is changed }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Garantir o Docker ativo
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Mesmo padrão da role docker/ do Oracle Linux. O usuário de serviço
+# (games) NÃO entra no grupo docker: isso equivaleria a dar root a ele.
+- name: Adicionar o usuário de administração ao grupo docker
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Aplica agora (e não no fim do play) restart/daemon-reload pendentes, para o
+# container do Zomboid já ser criado com a configuração nova do daemon.
+- name: Aplicar handlers pendentes do Docker
+  ansible.builtin.meta: flush_handlers

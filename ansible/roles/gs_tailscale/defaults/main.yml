@@ -1,0 +1,5 @@
+---
+gs_tailscale_hostname: gameserver
+gs_tailscale_tags:
+  - tag:gameserver
+gs_tailscale_keyring: /etc/apt/keyrings/tailscale-archive-keyring.gpg

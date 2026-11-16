@@ -1,0 +1,9 @@
+---
+gs_backup_dir: "{{ gameserver_root }}/backups/zomboid"
+gs_backup_zomboid_dir: "{{ gameserver_root }}/zomboid"
+gs_backup_container: zomboid
+gs_backup_retention_days: 7
+gs_backup_warn_seconds: 120
+# Diário às 05:00 (horário do servidor). Persistent=true no timer: se a VM
+# estiver desligada no horário, roda assim que ligar.
+gs_backup_on_calendar: "*-*-* 05:00:00"

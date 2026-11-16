@@ -1,0 +1,29 @@
+---
+- name: Criar usuário mvrc
+  user:
+    name: mvrc
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Criar diretório .ssh do mvrc
+  file:
+    path: /home/mvrc/.ssh
+    state: directory
+    owner: mvrc
+    group: mvrc
+    mode: '0700'
+
+- name: Autorizar chaves SSH (pessoal + Jenkins) para mvrc
+  authorized_key:
+    user: mvrc
+    key: "{{ lookup('file', item) }}"
+    state: present
+  loop: "{{ mvrc_ssh_public_keys }}"
+
+- name: Conceder sudo sem senha para mvrc
+  copy:
+    dest: /etc/sudoers.d/mvrc
+    content: "mvrc ALL=(ALL) NOPASSWD:ALL\n"
+    mode: '0440'
+    validate: 'visudo -cf %s'

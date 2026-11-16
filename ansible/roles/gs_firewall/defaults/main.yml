@@ -1,0 +1,10 @@
+---
+gs_firewall_ssh_port: "22"
+# Project Zomboid: 16261 (jogo) e 16262 (UDP direto), liberadas só na tailnet
+gs_firewall_zomboid_ports: "16261:16262"
+gs_firewall_tailscale_iface: tailscale0
+# Faixas da tailnet - conexões vindas daqui também contam como "seguras"
+# na checagem anti-lockout abaixo.
+gs_firewall_tailnet_ranges:
+  - 100.64.0.0/10
+  - fd7a:115c:a1e0::/48

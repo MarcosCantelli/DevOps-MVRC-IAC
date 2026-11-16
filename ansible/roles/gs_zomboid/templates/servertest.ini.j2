@@ -1,0 +1,15 @@
+# {{ ansible_managed }} (role gs_zomboid)
+#
+# Chaves GERENCIADAS do servidor. O entrypoint aplica cada linha por cima de
+# ~/Zomboid/Server/{{ gs_zomboid_servername }}.ini a cada start (o nome do .ini
+# segue o -servername). O restante do arquivo fica com os padrões que o
+# próprio servidor escreve.
+Public=false
+Open=false
+Password={{ zomboid_password }}
+SteamVAC=true
+MaxPlayers={{ gs_zomboid_max_players }}
+DefaultPort={{ gs_zomboid_default_port }}
+UDPPort={{ gs_zomboid_udp_port }}
+WorkshopItems={{ gs_zomboid_workshop_items | join(';') }}
+Mods={{ gs_zomboid_mods | join(';') }}
