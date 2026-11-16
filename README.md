@@ -153,6 +153,24 @@ O provider oVirt não tem um catálogo de imagens como a OCI — o template prec
 
 VM separada para servidores de jogos (Project Zomboid B42 em Docker). Ela é criada por `terraform/gameserver.tf` e configurada pelo playbook `ansible/playbooks/gameserver.yml` (roles `gs_*`), **fora do pipeline do Jenkins** por enquanto.
 
+### Criação da VM (manual, com state local)
+
+No pipeline, `gameserver_enabled = false`. O Jenkins apaga o tfstate a cada run e roda `destroy` quando falha, então ele não pode ser dono da VM de jogo. A criação é feita da sua máquina, mirando só nos recursos do gameserver:
+
+```bash
+cd terraform
+# exporte as mesmas TF_VAR_ do Jenkins (ovirt_url/username/password, cluster_id, chaves SSH) e:
+export TF_VAR_vnic_profile_id=<id-do-vnic-profile>
+terraform init
+terraform plan  -var gameserver_enabled=true -target=ovirt_vm_start.gameserver -target=data.ovirt_wait_for_ip.gameserver -out=gameserver.tfplan
+terraform apply gameserver.tfplan
+terraform output gameserver_ip_address
+```
+
+> O `-target` evita que o Terraform tente recriar a `olvm-app-server`, que pertence ao pipeline. **Guarde o `terraform.tfstate` gerado**: ele é o único registro dessa VM. Não fica no Git e será necessário para alterar ou destruir a VM depois. Ele vai para um backend remoto quando o state do projeto for migrado.
+
+### Configuração (Ansible)
+
 | Role           | O que faz                                                                    |
 |----------------|--------------------------------------------------------------------------------|
 | `gs_base`      | apt upgrade, unattended-upgrades, fail2ban, usuário `games` sem sudo, SSH só por chave |
@@ -276,7 +294,7 @@ Adicione as 6 credenciais OLVM/SSH + o PAT do GitHub listadas na tabela acima em
 
 - New Item → Pipeline
 - Build Triggers: `GitHub hook trigger for GITScm polling`
-- Pipeline: `Pipeline script from SCM` → Git → URL do seu repo → branch `*/olvm`
+- Pipeline: `Pipeline script from SCM` → Git → URL do seu repo → branch `*/main` (o pipeline só roda na `main`)
 - Script Path: `Jenkinsfile`
 
 ### 7. Dispare o pipeline
