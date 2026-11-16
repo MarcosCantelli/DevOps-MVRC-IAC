@@ -10,10 +10,12 @@ output "vm_name" {
 
 output "gameserver_ip_address" {
   description = "IP do gameserver: o estático configurado, ou o obtido via DHCP/guest agent"
-  value       = coalesce(var.gameserver_ip_address, local.gameserver_dhcp_ip)
+  # try(): com o gameserver desligado não há IP, e coalesce() sem nenhum
+  # valor não nulo daria erro - o output fica null.
+  value = try(coalesce(var.gameserver_ip_address, local.gameserver_dhcp_ip), null)
 }
 
 output "gameserver_vm_name" {
   description = "Nome da VM de servidor de jogos"
-  value       = ovirt_vm.gameserver.name
+  value       = one(ovirt_vm.gameserver[*].name)
 }

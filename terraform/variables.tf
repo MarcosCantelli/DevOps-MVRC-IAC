@@ -130,12 +130,19 @@ variable "jenkins_ssh_public_key_path" {
 # data source de busca por nome). Mesmo tratamento do cluster_id: ID interno
 # do ambiente, injetado via TF_VAR_ pelo Jenkins.
 variable "vnic_profile_id" {
-  description = "ID do vNIC profile (mesma rede das outras VMs) usado nas NICs criadas pelo Terraform"
+  description = "ID do vNIC profile (mesma rede das outras VMs) usado nas NICs criadas pelo Terraform. Obrigatório só com gameserver_enabled = true."
   type        = string
   sensitive   = true
+  default     = null
 }
 
 # Gameserver - VM dedicada a servidores de jogos (ver gameserver.tf)
+variable "gameserver_enabled" {
+  description = "Cria a VM gameserver. Fica false no pipeline; ligue só na criação manual (-var gameserver_enabled=true)."
+  type        = bool
+  default     = false
+}
+
 variable "gameserver_template_name" {
   description = "Nome do template Ubuntu (BIOS, sem NIC, com cloud-init e qemu-guest-agent) no OLVM"
   type        = string

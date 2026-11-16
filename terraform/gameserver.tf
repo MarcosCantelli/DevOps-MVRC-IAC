@@ -1,19 +1,28 @@
 # VM dedicada a servidores de jogos (Project Zomboid B42 em Docker, depois
 # outros jogos). Fica num arquivo separado para não tocar na VM de aplicação
 # (ovirt_vm.vm em main.tf) - os dois recursos são totalmente independentes.
+#
+# DESLIGADA POR PADRÃO (gameserver_enabled = false): o pipeline do Jenkins
+# (branch main) apaga o tfstate a cada run e roda destroy em caso de falha,
+# então a VM de jogo não pode depender dele. Ela é criada manualmente, com
+# state local - ver README, seção Gameserver.
 
 # Template Ubuntu já existente no OLVM (firmware BIOS, 2 vCPU / 2 GiB e SEM
 # interface de rede). Precisa ter cloud-init e qemu-guest-agent instalados,
 # como o template Oracle Linux (ver README).
 data "ovirt_templates" "ubuntu" {
+  count = var.gameserver_enabled ? 1 : 0
+
   name          = var.gameserver_template_name
   fail_on_empty = true
 }
 
 resource "ovirt_vm" "gameserver" {
+  count = var.gameserver_enabled ? 1 : 0
+
   name        = var.gameserver_vm_name
   cluster_id  = var.cluster_id
-  template_id = tolist(data.ovirt_templates.ubuntu.templates)[0].id
+  template_id = tolist(data.ovirt_templates.ubuntu[0].templates)[0].id
   clone       = true
 
   # Mesmo padrão da VM de aplicação: 1 socket x N cores x 1 thread
@@ -67,9 +76,18 @@ resource "ovirt_vm" "gameserver" {
 # O template não tem NIC, então ela é criada explicitamente, no mesmo vNIC
 # profile usado pelas outras VMs (ID injetado via TF_VAR_vnic_profile_id).
 resource "ovirt_nic" "gameserver" {
-  vm_id           = ovirt_vm.gameserver.id
+  count = var.gameserver_enabled ? 1 : 0
+
+  vm_id           = ovirt_vm.gameserver[0].id
   name            = "nic1"
   vnic_profile_id = var.vnic_profile_id
+
+  lifecycle {
+    precondition {
+      condition     = var.vnic_profile_id != null
+      error_message = "Com gameserver_enabled = true, defina TF_VAR_vnic_profile_id (ID do vNIC profile das outras VMs)."
+    }
+  }
 }
 
 # Aumenta o disco clonado do template para 60 GiB antes do primeiro boot.
@@ -77,14 +95,18 @@ resource "ovirt_nic" "gameserver" {
 # Atenção: este resource redimensiona TODOS os discos da VM (o template tem
 # só o disco do SO) e só aumenta - nunca reduz.
 resource "ovirt_vm_disks_resize" "gameserver" {
-  vm_id = ovirt_vm.gameserver.id
+  count = var.gameserver_enabled ? 1 : 0
+
+  vm_id = ovirt_vm.gameserver[0].id
   size  = var.gameserver_disk_size_gb * 1024 * 1024 * 1024
 }
 
 # Liga a VM só depois da NIC e do resize, para o cloud-init já encontrar a
 # placa de rede e o disco no tamanho final no primeiro boot.
 resource "ovirt_vm_start" "gameserver" {
-  vm_id = ovirt_vm.gameserver.id
+  count = var.gameserver_enabled ? 1 : 0
+
+  vm_id = ovirt_vm.gameserver[0].id
 
   depends_on = [
     ovirt_nic.gameserver,
@@ -95,8 +117,8 @@ resource "ovirt_vm_start" "gameserver" {
 # Mesmo mecanismo da VM de aplicação: sem IP fixo, descobre o IP do DHCP via
 # guest agent (qemu-guest-agent precisa estar ativo no template Ubuntu).
 data "ovirt_wait_for_ip" "gameserver" {
-  count = var.gameserver_ip_address == null ? 1 : 0
-  vm_id = ovirt_vm_start.gameserver.vm_id
+  count = var.gameserver_enabled && var.gameserver_ip_address == null ? 1 : 0
+  vm_id = ovirt_vm_start.gameserver[0].vm_id
 }
 
 locals {

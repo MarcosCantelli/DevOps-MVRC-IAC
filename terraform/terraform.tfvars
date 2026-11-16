@@ -22,8 +22,10 @@ nic_name      = "enp1s0"
 dns_primary   = "192.168.31.10"
 dns_secondary = "8.8.8.8"
 
-# Gameserver (ver gameserver.tf). O vnic_profile_id é injetado pelo Jenkins via
-# TF_VAR_vnic_profile_id - NUNCA preencha aqui.
+# Gameserver (ver gameserver.tf). DESLIGADO no pipeline: a VM é criada
+# manualmente com -var gameserver_enabled=true e TF_VAR_vnic_profile_id
+# exportado no shell (ver README) - NUNCA preencha o vnic_profile_id aqui.
+gameserver_enabled       = false
 gameserver_template_name = "Ubuntu-Terraform"
 gameserver_vm_name       = "gameserver"
 gameserver_cpu_sockets   = 1
