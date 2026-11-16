@@ -10,6 +10,7 @@ pipeline {
         TF_VAR_ovirt_username              = credentials('olvm-username')
         TF_VAR_ovirt_password              = credentials('olvm-password')
         TF_VAR_cluster_id                  = credentials('olvm-cluster-id')
+        TF_VAR_vnic_profile_id             = credentials('olvm-vnic-profile-id')
         TF_VAR_my_ssh_public_key_path      = credentials('mvrc-ssh-public-key-path')
         TF_VAR_jenkins_ssh_public_key_path = credentials('jenkins-ssh-public-key-path')
     }
