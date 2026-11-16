@@ -28,6 +28,36 @@ pipeline {
             }
         }
 
+        // O Jenkins não exporta variável com valor vazio: uma credencial
+        // salva com o Secret em branco faz o Terraform reclamar de
+        // "No value for required variable" sem dizer qual credencial é.
+        // Aqui o erro aponta o ID da credencial, sem imprimir valores.
+        stage('Validar credenciais') {
+            steps {
+                sh '''
+                    falhou=0
+                    for par in TF_VAR_ovirt_url:olvm-url \
+                               TF_VAR_ovirt_username:olvm-username \
+                               TF_VAR_ovirt_password:olvm-password \
+                               TF_VAR_cluster_id:olvm-cluster-id; do
+                        var=${par%%:*}; id=${par#*:}
+                        if [ -z "$(printenv "$var")" ]; then
+                            echo "ERRO: credencial '$id' está VAZIA no Jenkins (preencha o Secret de novo)."
+                            falhou=1
+                        fi
+                    done
+                    for f in "$TF_VAR_my_ssh_public_key_path" "$TF_VAR_jenkins_ssh_public_key_path" "$ANSIBLE_SSH_PRIVATE_KEY"; do
+                        if [ ! -r "$f" ]; then
+                            echo "ERRO: arquivo de chave '$f' não existe ou não é legível pelo usuário $(id -un)."
+                            falhou=1
+                        fi
+                    done
+                    [ "$falhou" -eq 0 ] && echo "Credenciais e chaves OK."
+                    exit "$falhou"
+                '''
+            }
+        }
+
         stage('Limpar state anterior') {
             steps {
                 dir('terraform') {
@@ -47,7 +77,7 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir('terraform') {
-                    sh 'terraform plan -out=tfplan'
+                    sh 'terraform plan -input=false -out=tfplan'
                 }
             }
         }
@@ -126,7 +156,7 @@ pipeline {
                 try {
                     dir('terraform') {
                         echo "Pipeline falhou. Destruindo VM se existir."
-                        sh 'terraform destroy -auto-approve || true'
+                        sh 'terraform destroy -input=false -auto-approve || true'
                     }
                 } catch (org.jenkinsci.plugins.workflow.steps.MissingContextVariableException e) {
                     echo "Pipeline falhou antes de alocar o workspace (ex: credencial ausente) - nada para destruir. Veja o erro no fim do log."
