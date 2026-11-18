@@ -45,10 +45,8 @@ resource "ovirt_vm" "gameserver" {
   memory_ballooning = false
 
   initialization_hostname = var.gameserver_vm_name
-  # Mesmo cloud-config da VM de aplicação: cria o mvrc com as duas chaves
-  # SSH. No Ubuntu o grupo "wheel" não existe. O cloud-init cria esse grupo,
-  # e o sudo vem da linha NOPASSWD, então funciona sem alterar o template
-  # compartilhado (alterá-lo geraria diff na VM de aplicação).
+  # Mesmo cloud-config da VM de aplicação (as duas usam o template Ubuntu):
+  # cria o mvrc com as duas chaves SSH e sudo sem senha.
   initialization_custom_script = local.cloud_init
 
   # IP fixo opcional, mesmo padrão de main.tf. Para servidor de jogo (port
@@ -81,13 +79,6 @@ resource "ovirt_nic" "gameserver" {
   vm_id           = ovirt_vm.gameserver[0].id
   name            = "nic1"
   vnic_profile_id = var.vnic_profile_id
-
-  lifecycle {
-    precondition {
-      condition     = var.vnic_profile_id != null
-      error_message = "Com gameserver_enabled = true, defina TF_VAR_vnic_profile_id (ID do vNIC profile das outras VMs)."
-    }
-  }
 }
 
 # Aumenta o disco clonado do template para 60 GiB antes do primeiro boot.
