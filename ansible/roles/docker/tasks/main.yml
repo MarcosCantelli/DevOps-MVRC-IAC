@@ -1,20 +1,47 @@
 ---
-- name: Instalar dependências para o Docker
-  dnf:
+# Instalação oficial do Docker CE no Ubuntu:
+# https://docs.docker.com/engine/install/ubuntu/
+- name: Remover pacotes que conflitam com o Docker CE
+  ansible.builtin.apt:
     name:
-      - dnf-utils
-    state: present
+      - docker.io
+      - docker-compose
+      - docker-compose-v2
+      - docker-doc
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
 
-# Docker não publica repositório próprio para Oracle Linux, mas o OL9 é
-# binário-compatível com RHEL/CentOS - o repo do CentOS é a rota
-# documentada/usada na prática para instalar Docker CE em Oracle Linux.
-- name: Adicionar repositório oficial do Docker CE (via repo CentOS, compatível com Oracle Linux)
-  command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-  args:
-    creates: /etc/yum.repos.d/docker-ce.repo
+- name: Garantir diretório de keyrings do apt
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Baixar chave GPG do repositório do Docker
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+# Arquivo .sources (formato deb822) escrito direto, sem depender do
+# python3-debian que o módulo deb822_repository exige no guest.
+- name: Adicionar repositório oficial do Docker CE
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.sources
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://download.docker.com/linux/ubuntu
+      Suites: {{ ansible_facts['distribution_release'] }}
+      Components: stable
+      Architectures: amd64
+      Signed-By: /etc/apt/keyrings/docker.asc
+  register: docker_repo
 
 - name: Instalar Docker Engine
-  dnf:
+  ansible.builtin.apt:
     name:
       - docker-ce
       - docker-ce-cli
@@ -22,24 +49,25 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
+    update_cache: "{{ docker_repo is changed }}"
 
 - name: Habilitar e iniciar o serviço Docker
-  systemd:
+  ansible.builtin.systemd_service:
     name: docker
     state: started
-    enabled: yes
+    enabled: true
 
 - name: Adicionar usuário mvrc ao grupo docker
-  user:
+  ansible.builtin.user:
     name: mvrc
     groups: docker
-    append: yes
+    append: true
 
 - name: Verificar instalação do Docker
-  command: docker --version
+  ansible.builtin.command: docker --version
   register: docker_version
   changed_when: false
 
 - name: Exibir versão do Docker instalado
-  debug:
+  ansible.builtin.debug:
     msg: "{{ docker_version.stdout }}"
