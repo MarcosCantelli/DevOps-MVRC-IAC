@@ -1,0 +1,32 @@
+---
+# Firewall do Ubuntu (substitui a role firewalld do Oracle Linux). Usa o
+# comando ufw direto, sem a coleção community.general, para o pipeline não
+# depender de coleções extras no Jenkins (mesmo estilo da role traefik).
+#
+# Atenção: portas publicadas pelo Docker (ports: no compose) passam por fora
+# do UFW. Aqui isso é o esperado para o Traefik (80); outras aplicações devem
+# entrar pela rede "web" do Traefik, sem publicar porta própria.
+- name: Instalar o UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+# SSH liberado ANTES de ativar o firewall, senão o Ansible perde a conexão.
+- name: Liberar portas SSH (22), HTTP (80) e HTTPS (443)
+  ansible.builtin.command: "ufw allow {{ item }}"
+  loop:
+    - 22/tcp
+    - 80/tcp
+    - 443/tcp
+  register: ufw_allow
+  changed_when: "'Skipping' not in ufw_allow.stdout"
+
+- name: Ler o estado do UFW
+  ansible.builtin.command: ufw status
+  register: ufw_status
+  changed_when: false
+
+- name: Ativar o UFW (bloqueia entrada, libera saída)
+  ansible.builtin.command: ufw --force enable
+  when: "'Status: active' not in ufw_status.stdout"
+  changed_when: true

@@ -1,11 +1,11 @@
 ---
 - name: Instalar pacotes essenciais
-  dnf:
+  ansible.builtin.apt:
     name:
       - curl
       - wget
       - unzip
       - git
-      - xz
+      - xz-utils
       - ca-certificates
     state: present

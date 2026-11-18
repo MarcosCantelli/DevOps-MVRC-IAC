@@ -1,0 +1,106 @@
+---
+# Repositório oficial: https://pkgs.tailscale.com/stable/#ubuntu
+- name: Garantir diretório de keyrings do apt
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Baixar chave do repositório oficial do Tailscale
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_facts['distribution_release'] }}.noarmor.gpg"
+    dest: "{{ gs_tailscale_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# deb822_repository não atualiza o cache sozinho: o apt seguinte faz o update
+# quando o repositório acabou de mudar. Precisa de python3-debian (gs_base).
+- name: Adicionar repositório oficial do Tailscale
+  ansible.builtin.deb822_repository:
+    name: tailscale
+    types: deb
+    uris: https://pkgs.tailscale.com/stable/ubuntu
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: main
+    signed_by: "{{ gs_tailscale_keyring }}"
+    state: present
+  register: gs_tailscale_repo
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Em --check no primeiro run o repositório ainda não foi adicionado de fato,
+# então o pacote "não existe" - por isso o ignore_errors só em check mode.
+- name: Instalar o Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+    update_cache: "{{ gs_tailscale_repo is changed }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Garantir o tailscaled ativo
+  ansible.builtin.systemd_service:
+    name: tailscaled
+    state: started
+    enabled: true
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Ler o estado atual do Tailscale
+  ansible.builtin.command: tailscale status --json
+  register: gs_tailscale_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Registrar se o nó já está conectado à tailnet
+  ansible.builtin.set_fact:
+    gs_tailscale_running: >-
+      {{ gs_tailscale_status.rc == 0
+         and (gs_tailscale_status.stdout | from_json).BackendState | default('') == 'Running' }}
+
+# Idempotente: só roda "up" se o nó ainda não estiver conectado. Se precisar
+# mudar tags/hostname de um nó já conectado, rode "tailscale up --reset ..."
+# manualmente ou faça logout antes. O authkey precisa ter permissão para a
+# tag (tagOwners na ACL da tailnet).
+- name: Conectar o nó à tailnet
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - up
+      - "--auth-key={{ tailscale_authkey }}"
+      - "--advertise-tags={{ gs_tailscale_tags | join(',') }}"
+      - "--hostname={{ gs_tailscale_hostname }}"
+  when: not (gs_tailscale_running | bool)
+  changed_when: true
+  no_log: true
+
+- name: Ler o IPv4 do Tailscale
+  ansible.builtin.command: tailscale ip -4
+  register: gs_tailscale_ip_cmd
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# Fact usado pela role gs_zomboid para publicar as portas SOMENTE neste IP.
+# Em --check sem Tailscale instalado ainda, usa um marcador visível no diff.
+- name: Registrar o IP do Tailscale como fact
+  ansible.builtin.set_fact:
+    gs_tailscale_ip: >-
+      {{ gs_tailscale_ip_cmd.stdout_lines | first
+         if (gs_tailscale_ip_cmd.rc == 0 and gs_tailscale_ip_cmd.stdout_lines | length > 0)
+         else ('TAILSCALE_IP_PENDENTE' if ansible_check_mode else '') }}
+
+# Nunca seguir com IP vazio: o compose publicaria as portas em 0.0.0.0, e o
+# Docker ignora o UFW. 100.64.0.0/10 é a faixa CGNAT usada pelo Tailscale.
+- name: Garantir que o IP do Tailscale é válido
+  ansible.builtin.assert:
+    that:
+      - gs_tailscale_ip is match('^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+$')
+    fail_msg: "IP do Tailscale inválido ou ausente ('{{ gs_tailscale_ip }}') - o nó está conectado à tailnet?"
+    quiet: true
+  when: not ansible_check_mode
+
+- name: Exibir IP do Tailscale
+  ansible.builtin.debug:
+    msg: "Tailscale IPv4: {{ gs_tailscale_ip }}"

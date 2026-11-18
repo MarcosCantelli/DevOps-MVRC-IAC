@@ -1,0 +1,15 @@
+---
+# MODELO do vault.yml - NUNCA coloque valores reais neste arquivo.
+#
+#   cp vault.example.yml vault.yml
+#   (preencha os valores reais no vault.yml)
+#   ansible-vault encrypt vault.yml
+#
+# O vault.yml está no .gitignore (repo público). Este arquivo também é
+# carregado pelo Ansible (mesma pasta), mas o vault.yml vem depois na ordem
+# alfabética e sobrescreve os valores. Se o vault.yml não existir, os valores
+# vazios abaixo fazem o playbook parar no assert inicial, em vez de rodar
+# com segredo em branco.
+tailscale_authkey: ""        # tskey-auth-... (reutilizável não é necessário; com tag:gameserver)
+zomboid_password: ""         # senha de entrada no servidor (só letras e números)
+zomboid_admin_password: ""   # senha do usuário admin do Zomboid (só letras e números)

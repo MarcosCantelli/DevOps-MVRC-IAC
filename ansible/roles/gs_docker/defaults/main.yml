@@ -1,0 +1,30 @@
+---
+gs_docker_keyring: /etc/apt/keyrings/docker.asc
+gs_docker_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+gs_docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+# Pacotes não oficiais que conflitam com o Docker CE (lista da doc oficial)
+gs_docker_conflicting_packages:
+  - docker.io
+  - docker-doc
+  - docker-compose
+  - docker-compose-v2
+  - podman-docker
+  - containerd
+  - runc
+
+gs_docker_daemon_config:
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "3"
+  # Defesa extra: porta publicada SEM IP explícito ("16261:16261") passa a
+  # escutar só em 127.0.0.1, em vez de 0.0.0.0. O Docker não respeita o
+  # UFW, então um esquecimento num compose não expõe nada para a rede.
+  ip: 127.0.0.1

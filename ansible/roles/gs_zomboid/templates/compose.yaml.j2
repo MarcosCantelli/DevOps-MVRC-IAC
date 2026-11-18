@@ -1,0 +1,33 @@
+# {{ ansible_managed }} (role gs_zomboid) - não editar na VM.
+name: {{ gs_zomboid_project }}
+
+services:
+  zomboid:
+    build:
+      context: .
+      args:
+        PUID: "{{ gs_zomboid_uid }}"
+        PGID: "{{ gs_zomboid_gid }}"
+    image: local/zomboid-server:latest
+    container_name: {{ gs_zomboid_container }}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PZ_SERVERNAME: "{{ gs_zomboid_servername }}"
+      PZ_JAVA_XMX: "{{ gs_zomboid_java_xmx }}"
+    # NUNCA publicar em 0.0.0.0: o Docker escreve direto no iptables e ignora
+    # o UFW. As portas escutam só no IP do Tailscale ({{ gs_tailscale_ip }}).
+    ports:
+      - "{{ gs_tailscale_ip }}:{{ gs_zomboid_default_port }}:{{ gs_zomboid_default_port }}/udp"
+      - "{{ gs_tailscale_ip }}:{{ gs_zomboid_udp_port }}:{{ gs_zomboid_udp_port }}/udp"
+    volumes:
+      - ./data/server:/opt/pzserver
+      - ./data/Zomboid:/home/pzserver/Zomboid
+      - ./state:/state
+      - ./config/servertest.ini:/config/server.ini:ro
+    # Tempo para o "quit" do entrypoint salvar o mundo antes do SIGKILL
+    stop_grace_period: 2m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

@@ -5,10 +5,12 @@ provider "ovirt" {
   tls_insecure = var.ovirt_tls_insecure
 }
 
-# Template Oracle Linux 9 preparado manualmente no OLVM (cloud-init instalado
-# e selado com virt-sysprep / "Make Template"). O provider não expõe um
-# catálogo de imagens como a OCI - o template precisa existir de antemão.
-data "ovirt_templates" "oracle_linux" {
+# Template Ubuntu preparado manualmente no OLVM (o mesmo do gameserver:
+# cloud-init e qemu-guest-agent instalados, SEM interface de rede). O provider
+# não expõe um catálogo de imagens como a OCI - o template precisa existir de
+# antemão. O disco do template NÃO pode ficar no hosted_storage: só SuperUser
+# cria disco no storage do Hosted Engine (ver README).
+data "ovirt_templates" "app" {
   name          = var.template_name
   fail_on_empty = true
 }
@@ -30,7 +32,7 @@ locals {
 resource "ovirt_vm" "vm" {
   name        = var.vm_name
   cluster_id  = var.cluster_id
-  template_id = tolist(data.ovirt_templates.oracle_linux.templates)[0].id
+  template_id = tolist(data.ovirt_templates.app.templates)[0].id
   clone       = true
 
   cpu_cores   = var.cpu_cores
@@ -57,10 +59,21 @@ resource "ovirt_vm" "vm" {
   }
 }
 
+# O template Ubuntu não tem NIC, então ela é criada explicitamente, no vNIC
+# profile da rede das outras VMs (ID injetado via TF_VAR_vnic_profile_id).
+resource "ovirt_nic" "vm" {
+  vm_id           = ovirt_vm.vm.id
+  name            = "nic1"
+  vnic_profile_id = var.vnic_profile_id
+}
+
 # A criação da VM não a liga automaticamente no OLVM - precisa deste
-# resource separado para ligá-la (e desligá-la no destroy).
+# resource separado para ligá-la (e desligá-la no destroy). Só liga depois
+# da NIC existir, para o cloud-init já encontrar a placa no primeiro boot.
 resource "ovirt_vm_start" "vm" {
   vm_id = ovirt_vm.vm.id
+
+  depends_on = [ovirt_nic.vm]
 }
 
 # Quando não há IP fixo, descobrimos o IP atribuído por DHCP através do
@@ -71,12 +84,16 @@ data "ovirt_wait_for_ip" "vm" {
   vm_id = ovirt_vm_start.vm.vm_id
 }
 
+# Prefere a NIC chamada var.nic_name; se o guest der outro nome à placa
+# (ex: ens3 em vez de enp1s0, conforme o chipset), usa a primeira interface
+# não-loopback com IPv4, em vez de deixar o pipeline sem IP.
 locals {
+  vm_guest_ifaces = try(tolist(one(data.ovirt_wait_for_ip.vm).interfaces), [])
   vm_dhcp_ip = try(
-    [
-      for iface in tolist(one(data.ovirt_wait_for_ip.vm).interfaces) : tolist(iface.ipv4_addresses)[0]
-      if iface.name == var.nic_name && length(iface.ipv4_addresses) > 0
-    ][0],
+    concat(
+      [for iface in local.vm_guest_ifaces : tolist(iface.ipv4_addresses)[0] if iface.name == var.nic_name && length(iface.ipv4_addresses) > 0],
+      [for iface in local.vm_guest_ifaces : tolist(iface.ipv4_addresses)[0] if iface.name != "lo" && length(iface.ipv4_addresses) > 0],
+    )[0],
     null
   )
 }

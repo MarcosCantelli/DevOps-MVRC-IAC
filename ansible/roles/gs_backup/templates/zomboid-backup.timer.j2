@@ -1,0 +1,10 @@
+# {{ ansible_managed }} (role gs_backup)
+[Unit]
+Description=Backup diário do Project Zomboid
+
+[Timer]
+OnCalendar={{ gs_backup_on_calendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target
