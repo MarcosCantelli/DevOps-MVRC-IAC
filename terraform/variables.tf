@@ -7,7 +7,7 @@ variable "ovirt_url" {
 }
 
 variable "ovirt_username" {
-  description = "Usuário para autenticação no OLVM (ex: admin@internal)"
+  description = "Usuário para autenticação no OLVM (ex: jenkins@mvrc.local@internalsso)"
   type        = string
   sensitive   = true
 }
@@ -36,7 +36,7 @@ variable "cluster_id" {
 }
 
 variable "template_name" {
-  description = "Nome do template Oracle Linux 9 já preparado com cloud-init no OLVM"
+  description = "Nome do template Ubuntu (sem NIC, com cloud-init e qemu-guest-agent) usado pela VM de aplicação"
   type        = string
 }
 
@@ -75,7 +75,7 @@ variable "memory_gb" {
 # depois via guest agent (ver ovirt_wait_for_ip em main.tf). Para IP fixo,
 # preencha vm_ip_address no terraform.tfvars.
 variable "nic_name" {
-  description = "Nome da NIC já presente no template (Oracle Linux 9 usa nomes previsíveis, ex: enp1s0, não eth0)"
+  description = "Nome da NIC dentro do guest Ubuntu (confirme com ip -o link: enp1s0 em Q35, ens3 em i440fx)"
   type        = string
   default     = "enp1s0"
 }
@@ -124,16 +124,15 @@ variable "jenkins_ssh_public_key_path" {
   sensitive   = true
 }
 
-# Rede compartilhada - vNIC profile (rede lógica) das VMs. A VM de aplicação
-# herda a NIC do template, mas o template Ubuntu do gameserver não tem NIC, então
-# ela é criada via ovirt_nic, que exige o ID do profile (o provider não tem
-# data source de busca por nome). Mesmo tratamento do cluster_id: ID interno
-# do ambiente, injetado via TF_VAR_ pelo Jenkins.
+# Rede compartilhada - vNIC profile (rede lógica) das VMs. O template Ubuntu
+# não tem NIC, então as duas VMs (aplicação e gameserver) criam a sua via
+# ovirt_nic, que exige o ID do profile (o provider não tem data source de busca
+# por nome). Mesmo tratamento do cluster_id: ID interno do ambiente, injetado
+# via TF_VAR_ pelo Jenkins (credencial olvm-vnic-profile-id).
 variable "vnic_profile_id" {
-  description = "ID do vNIC profile (mesma rede das outras VMs) usado nas NICs criadas pelo Terraform. Obrigatório só com gameserver_enabled = true."
+  description = "ID do vNIC profile (mesma rede das outras VMs) usado nas NICs criadas pelo Terraform"
   type        = string
   sensitive   = true
-  default     = null
 }
 
 # Gameserver - VM dedicada a servidores de jogos (ver gameserver.tf)

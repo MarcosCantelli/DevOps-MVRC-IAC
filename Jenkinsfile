@@ -10,6 +10,7 @@ pipeline {
         TF_VAR_ovirt_username              = credentials('olvm-username')
         TF_VAR_ovirt_password              = credentials('olvm-password')
         TF_VAR_cluster_id                  = credentials('olvm-cluster-id')
+        TF_VAR_vnic_profile_id             = credentials('olvm-vnic-profile-id')
 
         // Chaves SSH na home do usuário "jenkins" (ele não lê /home/mvrc/.ssh).
         // São só CAMINHOS, não segredos (já documentados no README), então
@@ -39,7 +40,8 @@ pipeline {
                     for par in TF_VAR_ovirt_url:olvm-url \
                                TF_VAR_ovirt_username:olvm-username \
                                TF_VAR_ovirt_password:olvm-password \
-                               TF_VAR_cluster_id:olvm-cluster-id; do
+                               TF_VAR_cluster_id:olvm-cluster-id \
+                               TF_VAR_vnic_profile_id:olvm-vnic-profile-id; do
                         var=${par%%:*}; id=${par#*:}
                         if [ -z "$(printenv "$var")" ]; then
                             echo "ERRO: credencial '$id' está VAZIA no Jenkins (preencha o Secret de novo)."
