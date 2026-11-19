@@ -25,10 +25,14 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 # Usuário não-root com o UID/GID do host. O UID do "games" (5) já existe na
-# imagem, por isso --non-unique; o processo é identificado pelo número.
+# imagem (e o 1000 é o "ubuntu"). Esse usuário é removido antes: o Java pega o
+# user.home do /etc/passwd pelo UID (não do $HOME), e com dois usuários no
+# mesmo UID valia o primeiro (/usr/games), quebrando o ~/Zomboid.
 RUN set -eux; \
+    olduser="$(getent passwd "${PUID}" | cut -d: -f1)"; \
+    if [ -n "${olduser}" ]; then userdel "${olduser}"; fi; \
     getent group "${PGID}" >/dev/null || groupadd -g "${PGID}" pzserver; \
-    useradd --non-unique -u "${PUID}" -g "${PGID}" -m -d /home/pzserver -s /usr/sbin/nologin pzserver; \
+    useradd -u "${PUID}" -g "${PGID}" -m -d /home/pzserver -s /usr/sbin/nologin pzserver; \
     mkdir -p /opt/pzserver /state /config /home/pzserver/Zomboid; \
     chown -R "${PUID}:${PGID}" /opt/pzserver /state /home/pzserver
 
