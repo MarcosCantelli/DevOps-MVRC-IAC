@@ -12,6 +12,11 @@ pipeline {
         TF_VAR_cluster_id                  = credentials('olvm-cluster-id')
         TF_VAR_vnic_profile_id             = credentials('olvm-vnic-profile-id')
 
+        // Segredos do gameserver (Tailscale + senhas do Zomboid): o vault.yml
+        // não vai para o Git (repo público), então o Jenkins recebe um YAML
+        // com as mesmas chaves do vault.example.yml como "Secret file".
+        GS_SECRETS                         = credentials('gameserver-secrets')
+
         // Chaves SSH na home do usuário "jenkins" (ele não lê /home/mvrc/.ssh).
         // São só CAMINHOS, não segredos (já documentados no README), então
         // ficam aqui direto em vez de em credenciais do Jenkins.
@@ -51,6 +56,25 @@ pipeline {
                     for f in "$TF_VAR_my_ssh_public_key_path" "$TF_VAR_jenkins_ssh_public_key_path" "$ANSIBLE_SSH_PRIVATE_KEY"; do
                         if [ ! -r "$f" ]; then
                             echo "ERRO: arquivo de chave '$f' não existe ou não é legível pelo usuário $(id -un)."
+                            falhou=1
+                        elif [ ! -s "$f" ]; then
+                            echo "ERRO: arquivo de chave '$f' está VAZIO."
+                            falhou=1
+                        fi
+                    done
+                    # Segredos do gameserver: confere só se as chaves existem e
+                    # não estão vazias - nunca imprime os valores.
+                    for k in tailscale_authkey zomboid_password zomboid_admin_password; do
+                        if ! grep -Eq "^${k}:[[:space:]]*[\\"']?[^\\"'[:space:]#]" "$GS_SECRETS"; then
+                            echo "ERRO: '$k' ausente ou vazio na credencial 'gameserver-secrets'."
+                            falhou=1
+                        fi
+                    done
+                    # As públicas vão para o authorized_keys do mvrc: um .pub
+                    # inválido sobe a VM sem aquela chave, sem erro nenhum.
+                    for f in "$TF_VAR_my_ssh_public_key_path" "$TF_VAR_jenkins_ssh_public_key_path"; do
+                        if [ -s "$f" ] && ! ssh-keygen -lf "$f" >/dev/null 2>&1; then
+                            echo "ERRO: '$f' não é uma chave pública SSH válida."
                             falhou=1
                         fi
                     done
@@ -97,10 +121,10 @@ pipeline {
                 dir('terraform') {
                     script {
                         env.VM_IP = sh(
-                            script: 'terraform output -raw vm_ip_address',
+                            script: 'terraform output -raw gameserver_ip_address',
                             returnStdout: true
                         ).trim()
-                        echo "IP estático da VM: ${env.VM_IP}"
+                        echo "IP do gameserver: ${env.VM_IP}"
                     }
                 }
             }
@@ -126,18 +150,27 @@ pipeline {
             }
         }
 
-        stage('Ansible - Provisionar VM OLVM') {
+        stage('Ansible - Provisionar gameserver') {
             steps {
                 sh '''
-                    echo "[olvm_servers]" > ansible/inventory/hosts.ini
-                    echo "''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=$ANSIBLE_SSH_PRIVATE_KEY ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
+                    echo "[gameservers]" > ansible/inventory/hosts.ini
+                    echo "gameserver ansible_host=''' + env.VM_IP + ''' ansible_user=mvrc ansible_ssh_private_key_file=$ANSIBLE_SSH_PRIVATE_KEY ansible_python_interpreter=/usr/bin/python3 ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> ansible/inventory/hosts.ini
                 '''
 
+                // community.general (ufw) e community.docker (compose v2)
+                sh '''
+                    cd ansible
+                    ansible-galaxy collection install -r requirements.yml
+                '''
+
+                // -e @arquivo: os segredos entram como extra vars, que vencem os
+                // valores vazios do vault.example.yml (group_vars).
                 sh '''
                     cd ansible
                     ansible-playbook \
                       -i inventory/hosts.ini \
-                      playbooks/provision-olvm-vm.yml
+                      -e @"$GS_SECRETS" \
+                      playbooks/gameserver.yml
                 '''
             }
         }
@@ -147,7 +180,7 @@ pipeline {
     post {
         success {
             echo "Pipeline finalizado com sucesso."
-            echo "VM disponível no IP: ${env.VM_IP}"
+            echo "Gameserver disponível no IP: ${env.VM_IP} (ssh mvrc@${env.VM_IP})"
         }
         failure {
             script {

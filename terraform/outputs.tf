@@ -1,11 +1,12 @@
 output "vm_ip_address" {
   description = "IP da VM: o estático configurado, ou o obtido via DHCP/guest agent"
-  value       = coalesce(var.vm_ip_address, local.vm_dhcp_ip)
+  # try(): com a VM de aplicação desligada não há IP - o output fica null.
+  value = try(coalesce(var.vm_ip_address, local.vm_dhcp_ip), null)
 }
 
 output "vm_name" {
   description = "Nome da VM criada"
-  value       = ovirt_vm.vm.name
+  value       = one(ovirt_vm.vm[*].name)
 }
 
 output "gameserver_ip_address" {
