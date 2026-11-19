@@ -1,11 +1,12 @@
 # VM dedicada a servidores de jogos (Project Zomboid B42 em Docker, depois
-# outros jogos). Fica num arquivo separado para não tocar na VM de aplicação
-# (ovirt_vm.vm em main.tf) - os dois recursos são totalmente independentes.
+# outros jogos). Fica num arquivo separado da VM de aplicação (ovirt_vm.vm em
+# main.tf) - os dois recursos são totalmente independentes.
 #
-# DESLIGADA POR PADRÃO (gameserver_enabled = false): o pipeline do Jenkins
-# (branch main) apaga o tfstate a cada run e roda destroy em caso de falha,
-# então a VM de jogo não pode depender dele. Ela é criada manualmente, com
-# state local - ver README, seção Gameserver.
+# Neste ambiente é a VM que o pipeline cria (gameserver_enabled = true e
+# app_vm_enabled = false no terraform.tfvars). Atenção: o pipeline ainda apaga
+# o tfstate a cada run, então ele cria a VM uma vez; os runs seguintes falham
+# no Terraform por nome repetido (sem tocar na VM existente) até o state ir
+# para um backend remoto.
 
 # Template Ubuntu já existente no OLVM (firmware BIOS, 2 vCPU / 2 GiB e SEM
 # interface de rede). Precisa ter cloud-init e qemu-guest-agent instalados,
@@ -119,12 +120,15 @@ data "ovirt_wait_for_ip" "gameserver" {
   vm_id = ovirt_vm_start.gameserver[0].vm_id
 }
 
+# Mesma lógica da VM de aplicação: prefere a NIC gameserver_nic_name e, se o
+# guest der outro nome à placa, usa a primeira interface não-loopback com IPv4.
 locals {
+  gameserver_guest_ifaces = try(tolist(one(data.ovirt_wait_for_ip.gameserver).interfaces), [])
   gameserver_dhcp_ip = try(
-    [
-      for iface in tolist(one(data.ovirt_wait_for_ip.gameserver).interfaces) : tolist(iface.ipv4_addresses)[0]
-      if iface.name == var.gameserver_nic_name && length(iface.ipv4_addresses) > 0
-    ][0],
+    concat(
+      [for iface in local.gameserver_guest_ifaces : tolist(iface.ipv4_addresses)[0] if iface.name == var.gameserver_nic_name && length(iface.ipv4_addresses) > 0],
+      [for iface in local.gameserver_guest_ifaces : tolist(iface.ipv4_addresses)[0] if iface.name != "lo" && length(iface.ipv4_addresses) > 0],
+    )[0],
     null
   )
 }

@@ -9,7 +9,10 @@ ovirt_tls_insecure = true
 # Template (nome não é sensível - é só um rótulo dado por você no OLVM)
 template_name = "Ubuntu-Terraform"
 
-# VM
+# VM de aplicação - DESLIGADA neste ambiente: o pipeline cria só o gameserver.
+# O código continua em main.tf para quem usar o repo como modelo.
+app_vm_enabled = false
+
 vm_name     = "olvm-app-server"
 cpu_cores   = 2
 cpu_sockets = 1
@@ -22,9 +25,9 @@ nic_name      = "enp1s0"
 dns_primary   = "192.168.31.10"
 dns_secondary = "8.8.8.8"
 
-# Gameserver (ver gameserver.tf). DESLIGADO no pipeline: a VM é criada
-# manualmente com -var gameserver_enabled=true (ver README).
-gameserver_enabled       = false
+# Gameserver (ver gameserver.tf) - é a VM que o pipeline cria e o Ansible
+# configura (playbooks/gameserver.yml).
+gameserver_enabled       = true
 gameserver_template_name = "Ubuntu-Terraform"
 gameserver_vm_name       = "gameserver"
 gameserver_cpu_sockets   = 1

@@ -40,7 +40,13 @@ variable "template_name" {
   type        = string
 }
 
-# VM
+# VM de aplicação
+variable "app_vm_enabled" {
+  description = "Cria a VM de aplicação (Docker + Traefik). false neste ambiente: o pipeline cria só o gameserver."
+  type        = bool
+  default     = true
+}
+
 variable "vm_name" {
   description = "Nome da instância"
   type        = string
@@ -137,7 +143,7 @@ variable "vnic_profile_id" {
 
 # Gameserver - VM dedicada a servidores de jogos (ver gameserver.tf)
 variable "gameserver_enabled" {
-  description = "Cria a VM gameserver. Fica false no pipeline; ligue só na criação manual (-var gameserver_enabled=true)."
+  description = "Cria a VM gameserver (true neste ambiente: é a VM que o pipeline cria)."
   type        = bool
   default     = false
 }
