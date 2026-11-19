@@ -1,9 +1,12 @@
 ---
 # Provisiona a VM de servidores de jogos (Ubuntu, criada pelo Terraform em
 # terraform/gameserver.tf). Roles com prefixo gs_ porque base/ e docker/ já
-# existem para o Oracle Linux da VM de aplicação.
+# existem para a VM de aplicação.
 #
-# Primeiro run (sempre em modo de simulação):
+# No pipeline: o Jenkins gera o inventory/hosts.ini e passa os segredos com
+# -e @<credencial gameserver-secrets>.
+#
+# Run manual (da sua máquina, com o vault.yml):
 #   cd ansible
 #   ansible-galaxy collection install -r requirements.yml
 #   ansible-playbook -i inventory/hosts.yml playbooks/gameserver.yml \
@@ -18,15 +21,24 @@
         delay: 10
         timeout: 180
 
-    - name: Garantir que os segredos do Vault foram carregados
+    # No primeiro boot o cloud-init ainda pode estar rodando (usuário, DNS,
+    # growpart) e travando o apt. rc 2 = terminou com avisos, não é falha.
+    - name: Aguardar o cloud-init terminar o primeiro boot
+      ansible.builtin.command: cloud-init status --wait
+      register: gs_cloud_init_status
+      changed_when: false
+      failed_when: gs_cloud_init_status.rc not in [0, 2]
+
+    - name: Garantir que os segredos foram carregados
       ansible.builtin.assert:
         that:
           - tailscale_authkey | default('') | length > 0
           - zomboid_password | default('') | length > 0
           - zomboid_admin_password | default('') | length > 0
         fail_msg: >-
-          Segredos ausentes. Crie inventory/group_vars/gameservers/vault.yml a
-          partir do vault.example.yml, criptografe com ansible-vault e rode com
+          Segredos ausentes. No Jenkins, confira a credencial gameserver-secrets.
+          No run manual, crie inventory/group_vars/gameservers/vault.yml a partir
+          do vault.example.yml, criptografe com ansible-vault e rode com
           --ask-vault-pass.
         quiet: true
 

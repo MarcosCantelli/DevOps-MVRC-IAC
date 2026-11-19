@@ -10,7 +10,9 @@
 
 Este projeto implementa um pipeline DevOps completo para uma VM no OLVM (Oracle Linux Virtualization Manager), o hypervisor KVM on-premises da Oracle — sucessor natural do ambiente vSphere/ESXi neste laboratório. Toda a etapa — da criação da instância até a configuração do servidor de aplicação — é automatizada e disparada por merge de Pull Request (ou execução manual do job Jenkins).
 
-O pipeline clona uma VM Ubuntu a partir de um template já preparado no OLVM via Terraform (provider `oVirt/ovirt` — o mesmo motor de API usado pelo OLVM), cria a placa de rede, atribui IP (DHCP ou estático) e cria o usuário `mvrc` já no primeiro boot via cloud-init. Em seguida o Ansible configura swap, abre o firewall e instala Docker + Traefik para hospedar aplicações em containers — a mesma base já usada na branch `oci`.
+O pipeline clona uma VM Ubuntu a partir de um template já preparado no OLVM via Terraform (provider `oVirt/ovirt` — o mesmo motor de API usado pelo OLVM), cria a placa de rede, atribui IP (DHCP ou estático) e cria o usuário `mvrc` já no primeiro boot via cloud-init. Em seguida o Ansible configura a VM.
+
+**Neste ambiente o pipeline cria o `gameserver`** (Project Zomboid B42 em Docker, ver seção Gameserver), com `gameserver_enabled = true` e `app_vm_enabled = false` no `terraform.tfvars`. A VM de aplicação (swap, UFW, Docker + Traefik, a mesma base da branch `oci`) continua no código, desligada, para quem usar o repo como modelo: basta inverter as duas variáveis e trocar o output e o playbook no Jenkinsfile.
 
 ---
 
@@ -25,9 +27,9 @@ GitHub (PR merged to main)
         ▼
      Jenkins
         │
-        ├── Stage 1 → Terraform   →  Clona a VM do template no OLVM (IP estático, cloud-init)
+        ├── Stage 1 → Terraform   →  Clona a VM do template no OLVM (NIC, disco, cloud-init)
         │
-        ├── Stage 2 → Ansible     →  Configura a VM (swap, UFW, Docker, Traefik)
+        ├── Stage 2 → Ansible     →  Configura o gameserver (playbooks/gameserver.yml)
         │
         └── Post Actions          →  Reporta sucesso ou destrói a VM em caso de falha
 ```
@@ -108,13 +110,15 @@ rm -f terraform.tfstate terraform.tfstate.backup tfplan
 Inicializa o provider `oVirt/ovirt`, localiza o template Ubuntu pelo nome e clona a VM no cluster informado, com CPU/memória e cloud-init definidos nas variáveis. O template não tem placa de rede: o Terraform cria a NIC (`ovirt_nic`) no vNIC profile informado em `olvm-vnic-profile-id`. A criação da VM (`ovirt_vm`), a NIC e a ligação da VM (`ovirt_vm_start`) são operações separadas no OLVM - o Terraform cuida de todas.
 
 ### 4. Capturar IP da VM
-Como o IP é estático (definido por você em `vm_ip_address`), este stage apenas lê o output `vm_ip_address` do Terraform para uso nos stages seguintes.
+Lê o output `gameserver_ip_address` do Terraform: o IP fixo, se `gameserver_ip_address` foi definido, ou o IP do DHCP informado pelo guest agent.
 
 ### 5. Aguardar VM inicializar
 Faz polling na porta 22 a cada 10s (até 5 minutos) antes de repassar para o Ansible.
 
-### 6. Ansible — Provisionar VM OLVM
-Conecta diretamente como `mvrc` (criado pelo cloud-init), espera o cloud-init terminar o primeiro boot e executa, em ordem:
+### 6. Ansible — Provisionar gameserver
+Gera o `inventory/hosts.ini` (grupo `gameservers`), instala as coleções do `requirements.yml` e roda o `playbooks/gameserver.yml` com os segredos da credencial `gameserver-secrets` (`-e @arquivo`). As roles estão na seção Gameserver.
+
+Com a VM de aplicação ligada (modelo), o playbook seria o `provision-olvm-vm.yml`, que conecta como `mvrc`, espera o cloud-init terminar o primeiro boot e executa, em ordem:
 
 | Role         | O que faz                                                              |
 |--------------|--------------------------------------------------------------------------|
@@ -155,20 +159,23 @@ O provider oVirt não tem um catálogo de imagens como a OCI — o template prec
 
 VM separada para servidores de jogos (Project Zomboid B42 em Docker). Ela é criada por `terraform/gameserver.tf` e configurada pelo playbook `ansible/playbooks/gameserver.yml` (roles `gs_*`), **fora do pipeline do Jenkins** por enquanto.
 
-### Criação da VM (manual, com state local)
+### Criação da VM (pelo pipeline)
 
-No pipeline, `gameserver_enabled = false`. O Jenkins apaga o tfstate a cada run e roda `destroy` quando falha, então ele não pode ser dono da VM de jogo. A criação é feita da sua máquina, mirando só nos recursos do gameserver:
+O merge na `main` dispara o Jenkins, que cria a VM (8 vCPU, 8 GiB, disco de 60 GiB, NIC no vNIC profile) e roda o playbook.
+
+> **Limitação atual:** o pipeline apaga o tfstate a cada run. Ele cria o gameserver uma vez; nos runs seguintes o Terraform falha por nome repetido, **sem tocar na VM existente** (o `destroy` do post roda com state vazio). Para reaplicar mudanças do Ansible enquanto o state não vai para um backend remoto, rode o playbook da sua máquina (abaixo). Para recriar a VM do zero, apague-a no portal antes de rodar o pipeline - **e faça backup dos saves antes**.
+
+> **SSD:** o disco do clone fica no mesmo storage do template (`data_vms_hd`). Para o jogo rodar no SSD, desligue a VM e use *Armazenamento → Discos → disco do gameserver → Mover* para um domínio de dados no SSD - nunca o `hosted_storage`.
+
+### Run manual do Ansible (da sua máquina)
+
+Preencha o `ansible_host` em `ansible/inventory/hosts.yml` com o IP do gameserver, crie o `vault.yml` a partir do `vault.example.yml` e rode:
 
 ```bash
-cd terraform
-# exporte as mesmas TF_VAR_ do Jenkins (ovirt_url/username/password, cluster_id, vnic_profile_id, chaves SSH) e:
-terraform init
-terraform plan  -var gameserver_enabled=true -target=ovirt_vm_start.gameserver -target=data.ovirt_wait_for_ip.gameserver -out=gameserver.tfplan
-terraform apply gameserver.tfplan
-terraform output gameserver_ip_address
+cd ansible
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i inventory/hosts.yml playbooks/gameserver.yml --ask-vault-pass --check --diff
 ```
-
-> O `-target` evita que o Terraform tente recriar a `olvm-app-server`, que pertence ao pipeline. **Guarde o `terraform.tfstate` gerado**: ele é o único registro dessa VM. Não fica no Git e será necessário para alterar ou destruir a VM depois. Ele vai para um backend remoto quando o state do projeto for migrado.
 
 ### Configuração (Ansible)
 
@@ -239,17 +246,18 @@ Nenhuma configuração aqui precisa mudar quando uma nova aplicação é adicion
 | `olvm-password`                 | Secret text | Senha do usuário OLVM                                                |
 | `olvm-cluster-id`               | Secret text | ID (UUID) do cluster OLVM onde as VMs são criadas                    |
 | `olvm-vnic-profile-id`          | Secret text | ID (UUID) do vNIC profile da rede das VMs (NIC criada pelo Terraform) |
+| `gameserver-secrets`            | Secret file | YAML com `tailscale_authkey`, `zomboid_password` e `zomboid_admin_password` (mesmo formato do `vault.example.yml`) |
 | `github-pat`                    | Secret text | GitHub Personal Access Token                                         |
 
-**Como achar o ID do vNIC profile:** o portal não mostra o ID, então consulte a API (troque o usuário; a senha é pedida no prompt):
+**Como achar o ID do vNIC profile:** o portal não mostra o ID. No OLVM manager, consulte o banco do engine (só leitura):
 
 ```bash
-curl -sk -u 'jenkins@mvrc.local@internalsso' -H 'Accept: application/json' \
-  https://olvm-manager.mvrc.local/ovirt-engine/api/vnicprofiles \
-  | python3 -c 'import json,sys; [print(p["id"], p["name"]) for p in json.load(sys.stdin)["vnic_profile"]]'
+sudo -u postgres psql -d engine -c "select p.id, p.name as perfil, n.name as rede from vnic_profiles p join network n on n.id = p.network_id;"
 ```
 
-Use o ID do profile da rede onde as outras VMs estão (normalmente `ovirtmgmt`).
+Use o ID do profile da rede onde as outras VMs estão (normalmente `ovirtmgmt`). Pela API com usuário do Keycloak, o login por `-u usuário:senha` não funciona: é preciso pedir um token em `/ovirt-engine/sso/oauth/token` antes, como o provider do Terraform faz.
+
+**Como criar a credencial `gameserver-secrets`:** crie um arquivo local (fora do repo) no formato do `vault.example.yml`, com os valores reais, e envie em *Add Credentials → Kind: Secret file*. Depois apague o arquivo local. O stage "Validar credenciais" confere se as três chaves existem e não estão vazias, sem imprimir os valores.
 
 ---
 
@@ -300,7 +308,7 @@ Events:        Just the push event
 
 ### 5. Configure as credenciais no Jenkins
 
-Adicione as 5 credenciais OLVM + o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
+Adicione as 5 credenciais OLVM, a `gameserver-secrets` e o PAT do GitHub listadas na tabela acima em `Manage Jenkins → Credentials`.
 
 ### 6. Crie o job do pipeline no Jenkins
 
