@@ -19,13 +19,19 @@ data "ovirt_templates" "app" {
 # intermediário via um usuário padrão da imagem, diferente do fluxo da OCI)
 # e autoriza as duas chaves SSH (pessoal + Jenkins).
 locals {
+  ssh_keys = [
+    trimspace(file(pathexpand(var.my_ssh_public_key_path))),
+    trimspace(file(pathexpand(var.jenkins_ssh_public_key_path))),
+  ]
+
+  # Um .pub vazio vira um item vazio em ssh_authorized_keys: a VM sobe, mas
+  # sem aquela chave (e o cloud-init só avisa de "schema validation").
+  ssh_keys_ok = alltrue([for k in local.ssh_keys : can(regex("^(ssh-|ecdsa-|sk-)", k))])
+
   cloud_init = templatefile("${path.module}/templates/cloud-init.yaml.tpl", {
     dns_primary   = var.dns_primary
     dns_secondary = var.dns_secondary
-    ssh_keys = [
-      trimspace(file(pathexpand(var.my_ssh_public_key_path))),
-      trimspace(file(pathexpand(var.jenkins_ssh_public_key_path))),
-    ]
+    ssh_keys      = local.ssh_keys
   })
 }
 
@@ -42,6 +48,13 @@ resource "ovirt_vm" "vm" {
 
   initialization_hostname      = var.vm_name
   initialization_custom_script = local.cloud_init
+
+  lifecycle {
+    precondition {
+      condition     = local.ssh_keys_ok
+      error_message = "Uma das chaves públicas SSH (my_ssh_public_key_path / jenkins_ssh_public_key_path) está vazia ou não é uma chave pública."
+    }
+  }
 
   # Só configura IP estático via cloud-init quando vm_ip_address é
   # preenchido. Deixando null, a NIC não é tocada e o template segue com o

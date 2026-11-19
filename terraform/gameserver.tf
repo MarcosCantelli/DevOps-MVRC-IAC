@@ -49,6 +49,13 @@ resource "ovirt_vm" "gameserver" {
   # cria o mvrc com as duas chaves SSH e sudo sem senha.
   initialization_custom_script = local.cloud_init
 
+  lifecycle {
+    precondition {
+      condition     = local.ssh_keys_ok
+      error_message = "Uma das chaves públicas SSH (my_ssh_public_key_path / jenkins_ssh_public_key_path) está vazia ou não é uma chave pública."
+    }
+  }
+
   # IP fixo opcional, mesmo padrão de main.tf. Para servidor de jogo (port
   # forward no roteador) vale a pena fixar o IP via gameserver_ip_address.
   dynamic "initialization_nic" {

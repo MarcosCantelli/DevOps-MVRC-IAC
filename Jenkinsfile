@@ -52,6 +52,17 @@ pipeline {
                         if [ ! -r "$f" ]; then
                             echo "ERRO: arquivo de chave '$f' não existe ou não é legível pelo usuário $(id -un)."
                             falhou=1
+                        elif [ ! -s "$f" ]; then
+                            echo "ERRO: arquivo de chave '$f' está VAZIO."
+                            falhou=1
+                        fi
+                    done
+                    # As públicas vão para o authorized_keys do mvrc: um .pub
+                    # inválido sobe a VM sem aquela chave, sem erro nenhum.
+                    for f in "$TF_VAR_my_ssh_public_key_path" "$TF_VAR_jenkins_ssh_public_key_path"; do
+                        if [ -s "$f" ] && ! ssh-keygen -lf "$f" >/dev/null 2>&1; then
+                            echo "ERRO: '$f' não é uma chave pública SSH válida."
+                            falhou=1
                         fi
                     done
                     [ "$falhou" -eq 0 ] && echo "Credenciais e chaves OK."
