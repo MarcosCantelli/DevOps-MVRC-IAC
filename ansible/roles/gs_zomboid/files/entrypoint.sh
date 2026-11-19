@@ -92,7 +92,10 @@ mkfifo -m 600 "${CONSOLE}"
 # recebe EOF no stdin, mesmo quando ninguém está escrevendo.
 exec 3<>"${CONSOLE}"
 
+# -cachedir fixa a pasta Zomboid no volume. Sem ele o jogo usa o user.home do
+# Java (vindo do /etc/passwd pelo UID), que não segue o $HOME do container.
 "${INSTALL_DIR}/start-server.sh" \
+  -cachedir="${ZOMBOID_DIR}" \
   -servername "${SERVERNAME}" \
   -adminpassword "${PZ_ADMIN_PASSWORD}" <&3 &
 PZ_PID=$!
